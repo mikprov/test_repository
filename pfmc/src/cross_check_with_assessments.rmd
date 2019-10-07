@@ -1,0 +1,230 @@
+---
+title: "Cross-checking maturity-, wt-, length-, and eggs-at-age with stock assessment figures"
+author: "Mikaela Provost"
+date: "August 14, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r include=FALSE}
+# load functions
+source("C:/Users/provo/Documents/GitHub/pfmc/src/life_table_calculations.r")
+
+```
+##1. Sardine: matches assessment
+
+```{r}
+# sardine 
+# plot wt (kg) vs length (cm) --> matches stock assessment figure 3
+plot(x=La_list$sardine,y=Ba_list$sardine,xlab="cm",ylab="kg",type="l")
+# plot maturity*fecundity vs age --> matches stock assessment figure 5b
+sardine_matxeggs <- eggs_list$sardine*prop_list$sardine
+plot(sardine_matxeggs,ylab="eggs/kg (X1000)",type="l")
+```
+
+##2. Mackerel:
+```{r}
+# mackerel ---
+# currently a problem species
+```
+
+##3. Yellowfin tuna:
+
+##4. Bigeye tuna:
+
+##5. Bluefin tuna:
+
+##6. Bocaccio: matches assessment
+```{r}
+# bocaccio 
+# plot eggs vs (this matches)
+plot(x=Ba_list$bocaccio,y=eggs_list$bocaccio,
+     ylab="eggs/kg (1000)",xlab="kg",type="l")
+# plot kg vs cm (matches assessment, figure 13)
+plot(x=La_list$bocaccio,y=Ba_list$bocaccio,
+     ylab="kg",xlab="cm",type="l",
+     xlim=c(0,85),ylim=c(0,8))
+# plot cm vs age
+plot(La_list$bocaccio,ylab="cm",xlab="age",type="l")
+# plot prop mat*eggs vs cm (this does not)
+plot(x=La_list$bocaccio,y=(eggs_list$bocaccio), 
+     ylab="eggs/kg",xlab="cm",type="l",
+     xlim=c(10,80),ylim=c(0,2000))
+```
+
+##7. Cabezon: matches assessment
+```{r}
+# cabezon 
+# plot prop mature vs cm and age (matches assessment, fig 7)
+plot(x=La_list$cabezon,y=prop_list$cabezon,
+     xlab="cm",ylab="maturity",type="l")
+plot(prop_list$cabezon,xlab="age",ylab="maturity",type="l")
+# plot cm vs age (matches assessement, fig 8)
+plot(La_list$cabezon,xlab="age",ylab="cm",type='l')
+# plot eggs vs age (matches assessment)
+plot(eggs_list$cabezon,ylab="eggs/kg (1000s)",xlab="age",type = "l")
+plot(Ba_list$cabezon,ylab="kg",xlab="age",type = "l")
+```
+
+##8. Canary: matches assessment
+```{r}
+# canary 
+# plot eggs vs kg (matches assessment, fig 35)
+plot(y=eggs_list$canary, x=Ba_list$canary,
+     ylab="eggs", xlab="kg",type="l")
+# plot prop mat vs cm (matches assessment, fig 34)
+plot(y=prop_list$canary, x=La_list$canary,
+     ylab="maturity", xlab="cm",type="l")
+# plot kg vs cm (matches assessment, fig 36 log scale)
+plot(log10(Ba_list$canary), x=log10(La_list$canary),
+     ylab="kg", xlab="cm",type="l")
+```
+
+##9. Chilipepper: matches assessment
+```{r}
+
+# chilipepper --- check ---
+# plot kg vs cm
+plot(y=Ba_list$chilipepper, x=La_list$chilipepper,
+     ylab="kg", xlab="cm",type="l")
+# plot maturity vs cm
+plot(y=prop_list$chilipepper, x=La_list$chilipepper,
+     ylab="maturity", xlab="cm",type="l")
+# plot eggs vs kg
+plot(y=eggs_list$chilipepper, x=Ba_list$chilipepper,
+     ylab="eggs/kg", xlab="kg",type="l",
+     ylim=c(0,200),xlim=c(0,1.2))
+# plot eggs vs cm
+plot(y=eggs_list$chilipepper, x=La_list$chilipepper,
+     ylab="eggs/kg", xlab="cm",type="l",
+     ylim=c(0,300),xlim=c(10,50))
+# plot eggs*prop vs cm
+plot(y=(eggs_list$chilipepper*prop_list$chilipepper),
+     x=La_list$chilipepper,
+     ylab="eggs*prop mature", xlab="cm",type="l",
+     ylim=c(0,300),xlim=c(10,50))
+```
+
+##10. Darkblotched: matches assessment
+```{r}
+# darkblotched --- check ---
+# plot cm at age (matches assessment, fig 42)
+plot(La_list$darkblotched[1:20],ylab="cm",
+     xlab="age",type="l")
+# plot kg vs cm (matches assessment, fig 43)
+plot(y=Ba_list$darkblotched,x=La_list$darkblotched,
+     ylab="kg",xlab="cm",type="l")
+# plot maturity vs cm (matches assessment, fig 44)
+plot(y=prop_list$darkblotched,x=La_list$darkblotched,
+     ylab="maturity",xlab="cm",type="l")
+# plot eggs*prop vs cm (matches assessment, fig 46)
+plot(y=(prop_list$darkblotched*eggs_list$darkblotched),
+     x=La_list$darkblotched,
+     ylab="eggs*prop",xlab="cm",type="l")
+```
+
+##11. Dover: matches assessment
+```{r}
+# dover 
+# plot kg vs cm (matches assessment, fig25)
+plot(y=Ba_list$dover,x=La_list$dover,
+     ylab="kg",xlab="cm",type="l")
+# plot maturity vs cm (matches assessment, fig26)
+plot(y=prop_list$dover,x=La_list$dover,
+     ylab="mature",xlab="cm",type="l")
+# plot length at age (matches assessment, fig28)
+plot(La_list$dover,
+     ylab="cm",xlab="age",type="l")
+```
+
+##12. English: matches assessment
+```{r}
+# english --- check ---
+# plot cm vs age (matches assessmetn, fig6)
+plot(La_list$english,
+     ylab="cm",xlab="age",type="l")
+# plot maturity vs cm (matches assessment, fig8 mostly)
+plot(y=prop_list$english,x=La_list$english,
+     ylab="maturity",xlab="cm",type="l")
+# plot eggs vs kg
+plot(y=eggs_list$english,x=Ba_list$english,
+     ylab="eggs",xlab="kg",type="l")
+```
+
+##13. Lingcod: matches assessment
+```{r}
+# lingcod --- check ---
+# plot maturity vs length (matches assessment, fig94)
+plot(y=prop_list$lingcod,x=La_list$lingcod,
+     ylab="maturity",xlab="cm",type="l")
+# plot egg*prop vs cm (matches assessment, fig95)
+plot(y=(eggs_list$lingcod*prop_list$lingcod),x=La_list$lingcod,
+     ylab="eggs*prop",xlab="cm",type="l")
+# plot cm at age
+plot(La_list$lingcod,
+     ylab="cm",xlab="age",type="l",
+     ylim=c(0,120),xlim=c(0,20))
+```
+
+##14. Hake: matches assessment (but a little unsure)
+```{r}
+# hake --- check (but unsure) ---
+# plot maturity vs cm (matches assessment, fig11)
+plot(y=prop_list$hake,x=La_list$hake,
+     ylab="maturity",xlab="cm",type="l")
+# plot eggs vs kg
+plot(y=eggs_list$hake,x=Ba_list$hake,
+     ylab="eggs",xlab="kg",type="l")
+```
+
+##15. POP: 
+
+##16. Petrale: matches assessment
+```{r}
+# petrale 
+# plot cm at age (matches assessment, fig13)
+plot(La_list$petrale,
+     ylab="cm",xlab="age",type="l")
+# plot kg vs cm (matches assessment, fig23)
+plot(y=Ba_list$petrale,x=La_list$petrale,
+     ylab="kg",xlab="cm",type="l")
+# plot maturity vs cm (matches assessment, fig24)
+plot(y=prop_list$petrale,x=La_list$petrale,
+     ylab="maturity",xlab="cm",type="l")
+# plot eggs*prop vs cm (matches assessment, fig25)
+plot(y=(eggs_list$petrale*prop_list$petrale),x=La_list$petrale,
+     ylab="eggs*prop",xlab="cm",type="l")
+```
+
+##17. Sablefish: matches assessment
+```{r}
+# sablefish 
+# plot maturity vs cm (matches assessment, fig30)
+plot(y=prop_list$sablefish,x=La_list$sablefish,
+     ylab="maturity",xlab="cm",type="l")
+# plot cm at age (matches assessment, fig61)
+plot(La_list$sablefish,
+     ylab="cm",xlab="age",type="l")
+```
+
+##18. Window: matches assessment
+```{r}
+# window
+# plot kg vs cm (matches assessment, fig41)
+plot(y=Ba_list$window,x=La_list$window,
+     ylab="kg",xlab="cm",type="l")
+# plot maturity vs cm (matches assessment, fig42)
+plot(y=prop_list$window,x=La_list$window,
+     ylab="maturity",xlab="cm",type="l")
+# plot cm at age (matches assessment, fig45)
+plot(La_list$window,
+     ylab="cm",xlab="age",type="l")
+```
+
+##19. Coho:
+
+##20. Chinook:

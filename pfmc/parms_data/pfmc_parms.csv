@@ -1,0 +1,21 @@
+spp,problem_spp,problem_comment,spptype,scientific,M,steepness,sigmaR,propmatFUN,propmat_inflection,propmat_slope,cmkga,cmkgb,cmgra,cmgrb,growthFUN,L1,L2,t1,t2,Ksch,Kvonb,tknot,Linf,maxage,eggsFUN,eggsslope,eggsintercept,eggs_units
+Mackerel,yes,eggsFUN_is_vector,coastalpelagic,Scomber japonicus,0.5,0.47,0.75,check,check,check,2.70E-06,3.44,,,schnute,20.5,39.2,0.5,12,0.39,NA,NA,NA,13,vector,vector,vector,check
+Sardine,no,NA,coastalpelagic,Sardinops sagax caerulea,0.4,0.8,0.75,length,15.44,-0.89252,7.52E-06,3.2332,,,vonb,10,25,0.5,999,0.4,0.318,-2.01,23.788,15,fun1,0,1,eggs_per_kg
+Yellowfin,yes,missing_all_parms,hms,Thunnus albacares,0.45,0.75,0.6,check,check,check,check,check,,,check,check,check,check,check,check,check,check,check,7,check,check,check,check
+Bigeye,yes,missing_all_parms,hms,Thunnus obesus,0.175,0.8,0.6,check,check,check,check,check,,,check,check,check,check,check,check,check,check,check,12,check,check,check,check
+Bluefin,no,missing_all_parms,hms,Thunnus orientalis,0.925,0.999,0.6,check,vector,vector,1.71E-05,3.0382,,,schnute,19.05,118.57,0,3,0.188,0.188,0.4217,249.92,26,fun1,0,1,eggs_per_kg
+Bocaccio,yes,growth_fun_and_eggs_problems,groundfish,Sebastes paucispinis,0.15,0.773,1,length,37.7,-0.334,7.36E-06,3.1136,,,schnute,18.3,67.34,0.5,25,0.226,NA,NA,NA,34,fun2,20,254.9,eggs_per_kg
+Cabezon,no,NA,groundfish,Scorpaenichthys marmoratus,0.25,0.7,1,length,34.6,-0.7,9.18E-06,3.188,,,schnute,13.97,59,0,999,0.17,0.21,-1.28,58.97,13,fun1,0,1,eggs_per_kg
+Canary,no,NA,groundfish,Sebastes pinniger,0.0521,0.773,0.5,length,40.5,-0.25,1.55E-05,3.094,,,schnute,3.8,60.05,1,30,0.14,NA,NA,NA,84,fun1,21.7,261.9,eggs_per_kg
+Chilipepper,no,NA,groundfish,Sebastes goodei,0.16,0.81,1,length,24.4,-0.27,4.05E-06,3.2,,,schnute,19.66,47.3,2,18,0.1945,NA,NA,NA,21,fun1,59,132.355,eggs_per_kg
+Darkblotched,no,NA,groundfish,Sebastes crameri,0.054,0.83,0.75,length,34.6,-0.6429,1.15E-05,3.1254,,,schnute,14.5,42.44,2,30,0.2,NA,NA,NA,105,fun1,44800,101100,eggs_per_kg
+Dover,no,NA,groundfish,Microstomus pacificus,0.103,0.8,0.35,length,35,-0.775,2.23E-06,3.345,,,schnute,15,47.5,1,45,0.096,NA,NA,NA,70,fun1,0,1,eggs_per_kg
+English,no,NA,groundfish,Parophrys vetulus,0.26,1,0.42,length,23.3,-0.61,5.47E-06,3.15,,,schnute,16.37,39.8,2,20,0.39,NA,NA,NA,20,fun1,0,1,eggs_per_kg
+Lingcod,no,NA,groundfish,Ophiodon elongatus,0.18,0.8,0.5,length,68.059,-0.1577,1.76E-06,3.3978,,,schnute,30,118,1,20,0.1041,NA,NA,NA,18,fun1,0,1,eggs_per_kg
+Hake,no,NA,groundfish,Merluccius productus,0.22,0.777,1.4,length,36.89,-0.48,7.00E-06,2.9624,,,schnute,5,53.2,1,20,0.3,NA,NA,NA,22,fun1,0,1,eggs_per_kg
+Pacific_Ocean_Perch,yes,eggsFUN_is_unique,groundfish,Sebastes alutus ,0.05,0.4,0.7,age,8,-2,1.07E-05,3.08,1.07E-02,3.08,schnute,21.2,41.98,3,25,0.159,NA,NA,NA,100,fun3,other,other,eggs_per_kg
+Petrale,no,NA,groundfish,Eopsetta jordani,0.151,0.9,0.4,length,33.1,-0.743,2.08E-06,3.47,,,schnute,15.8,54.4,2,17,0.13,NA,NA,NA,31,fun1,0,1,eggs_per_kg
+Sablefish,no,NA,groundfish,Anoplopoma fimbria,0.07,0.6,0.95,length,58,-0.13,3.20E-06,3.27,,,schnute,26.15,64.23,0.5,30,0.3268,NA,NA,NA,85,fun1,0,1,eggs_per_kg
+Widow,no,NA,groundfish,Sebastes entomelas,0.124,0.798,0.6,age,5.47,-0.7747,1.74E-05,2.9617,,,schnute,20,50,3,40,0.19,0.15,-2.22,50.34,54,fun1,0,1,eggs_per_kg
+Coho,yes,missing_all_parms,salmon,Oncorhynchus kisutch,check,check,check,check,check,check,check,check,,,check,check,check,check,check,check,check,check,check,check,check,check,check,check
+Chinook,yes,missing_all_parms,salmon,Oncorhynchus tshawytscha,check,check,check,check,check,check,check,check,,,check,check,check,check,check,check,check,check,check,check,check,check,check,check

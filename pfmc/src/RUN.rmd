@@ -1,0 +1,957 @@
+---
+title: "Ch 2 Plots"
+author: "Mikaela Provost"
+date: "August 27, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+```{r include=FALSE, warning=FALSE, message=FALSE}
+# RUN
+# by: mikaela provost
+# last edited: Aug 1, 2019
+# ===================================================================
+
+
+library(tidyr)
+library(dplyr)
+library(gridExtra)
+library(ggplot2)
+library(directlabels)
+library(grid)
+library(lattice)
+library(tidyverse)
+library(tidycensus)
+library(ggrepel)
+library(biwavelet)
+library(data.table)
+
+# *************************************** #
+# Plan:
+# (1) run script to calculate life table information and load parms df
+# (2) assemble Leslie matrices for different F values
+# (3) simulate time series 
+# (4) calculate spectra
+
+
+
+# *************************************** #
+# (1) run script to get life table information, parms df, and functions
+source("C:/Users/provo/Documents/GitHub/pfmc/src/life_table_calculations.r")
+
+# *************************************** #
+# (2) assemble Leslie matrices for different F values
+
+# make all LEPs equal
+conLEP = 3 #1.1
+# adjust fecundities by this much
+adjFec = round(1/conLEP,digits=1)
+
+# Find F values that correspond to Exploitation Index values (BEFORE LEP=1.1)
+# EI_F_before1.1_L <- as.list(rep(NA,length=length(parms$spp)))
+# names(EI_F_before1.1_L) <- parms$spp
+# system.time(for (i in 1:length(EI_F_before1.1_L)){ #for each spp
+#   if(parms[parms$spp == parms$spp[i],]$problem_spp == "yes") {#if a problem, then
+#     EI_F_before1.1_L[[i]] <- "problem"} #temporarily save in problemhold
+#   else {
+#     targetF <- calculate_F_from_EI(EI=c(0,0.4,0.6,0.8,0.95),
+#                                maxage=as.numeric(parms[parms$spp == parms$spp[i],]$maxage),
+#                                L_a=La_list[[i]],
+#                                B_a=Ba_list[[i]],
+#                                propmat_a=prop_list[[i]],
+#                                eggs_a=eggs_list[[i]],
+#                                vul_a=vul_list[[i]],
+#                                M=as.numeric(parms[parms$spp == parms$spp[i],]$M),
+#                                Fvals_many=seq(from=0,to=100,by=0.1))
+#     targetF$spp <- rep(parms$spp[i],length=length(targetF[,1]))
+#     EI_F_before1.1_L[[i]] <- targetF
+#   }
+# })
+# EI_F_before1.1 <- bind_rows(EI_F_before1.1_L)
+
+# ***
+Fvals=seq(from=0,to=2,by=0.001)
+A3d_list = as.list(rep(NA,length(parms$spp))) #Leslie arrays in list
+LTABLE_list <- as.list(rep(NA,length(parms$spp))) #LTABLE arrays in list
+names(A3d_list) <- parms$spp
+names(LTABLE_list) <- parms$spp
+eigan1 <- matrix(NA,nrow=length(Fvals),ncol=length(parms$spp))
+eigan12 <- matrix(NA,nrow=length(Fvals),ncol=length(parms$spp))
+LEPs <- matrix(NA,nrow=length(Fvals),ncol=length(parms$spp))
+constLEP <- matrix(NA,nrow=length(Fvals),ncol=length(parms$spp))
+EI_F_LEP1.1_L <- as.list(rep(NA,length=length(parms$spp)))
+names(EI_F_LEP1.1_L) <- parms$spp
+
+
+system.time(for (i in 1:length(parms$spp)){ #for each spp
+  
+  if(parms[parms$spp == parms$spp[i],]$problem_spp == "yes") {#if a problem, then
+    problemshold <- parms$spp[i]} #temporarily save in problemhold
+  else {
+  # define parms for spp i
+  M = as.numeric(parms[parms$spp == parms$spp[i],]$M)
+  maxage = as.numeric(parms[parms$spp == parms$spp[i],]$maxage)
+  
+  # create empty arrays for Leslie and LTABLE, vectors for eigens 
+  A3d <- array(NA,c(maxage,maxage,length(Fvals)))
+  LTABLE3d <- array(NA,c(maxage,15,length(Fvals))) #12 cols
+  e1 <- rep(NA,length=length(Fvals))
+  e2 <- rep(NA,length=length(Fvals))
+  e12 <- rep(NA,length=length(Fvals))
+  lep <- rep(NA,length=length(Fvals))
+  
+  # assemble Leslie for each value of Fvals
+  for(f in 1:length(Fvals)){
+    out <- assemble_Leslie(maxage=maxage,
+                           L_a=La_list[[i]],
+                           B_a=Ba_list[[i]],
+                           propmat_a=prop_list[[i]],
+                           eggs_a=eggs_list[[i]],
+                           vul_a=vul_list[[i]],
+                           M=M,
+                           Fval=Fvals[f]) #F=0, change this if want fishing
+    LTABLE3d[,,f] <- data.matrix(out$LTABLE) #store LTABLE in 3d array
+    
+    # calculate LEP at F=0 (use this value of LEP to standardize unfished fecundity)
+    lep_unfished = sum(out$LTABLE$LEP_a)
+    
+    # Asim = adjust fecundities so LEP equal for all species - simulation matrix
+    Asim <- out$A
+    Asim[1,] <- (Asim[1,]/(lep_unfished*adjFec))
+    A3d[,,f] <- Asim
+    
+    # Aeig = adjust fecundities and multiply by k - eigen analysis matrix
+    Aeig <- out$A
+    Aeig[1,] <- (Aeig[1,]/(lep_unfished*adjFec)) # *Fvals[f]
+    
+    # re-calculate new LEP w/o F (should equal conLEP)
+    term <- rep(NA,length=maxage)
+    for(a in 1:maxage){term[a] <- Asim[1,a]*out$LTABLE$Survship[a]} #fecundity*survivorship
+    constLEP[f,i] <- sum(term) #plotting 'term' is the spawning distribution over age
+    rm(term,a)
+    
+    # calculate LEP w/F
+    term <- rep(NA,length=maxage)
+    for(a in 1:maxage){term[a] <- Asim[1,a]*out$LTABLE$Survship_Fing[a]} #fec*survshp w/F
+    LEPs[f,i] <- sum(term)
+    rm(term,a)
+    
+    # extract lambda1, lambda2/lambda1
+    e1[f] = extract_first_eigen_value(Aeig)
+    e2[f] = extract_second_eigen_value(Aeig)
+    e12[f] = e2[f] / e1[f]
+    
+    
+  } #closes F loop
+  EI_F_LEP1.1_L[[i]] <- calculate_F_from_EI_Leslie(A=A3d[,,1],
+                             vul_a=vul_list[[i]],
+                             Fvals=Fvals,
+                             M=as.numeric(parms$M[i]),
+                             EI=c(0,0.4,0.6,0.8))
+  #dimnames(A3d)[[3]] <-as.character(Fvals) #label the 3rd dim by Fvals
+  saveFs <- which(Fvals %in% EI_F_LEP1.1_L[[i]]$matching_F) #where are Fs of interest?
+  A3dsave <- A3d[,,saveFs] #save only Leslie matrices that match Fs
+  
+  A3d_list[[i]] <- A3dsave 
+  LTABLE_list[[i]] <- LTABLE3d
+  eigan1[,i] <- e1
+  eigan12[,i] <- e12
+  LEPs[,i] <- lep
+  #clean up before next i in loop
+  #rm(A3d,LTABLE3d,out,M,maxage) 
+  } #closes 'else' bracket for non-problem species.
+  print(i)
+}) #closes spp loop
+rm(i,f,M,maxage,problemshold,lep,A3d,A3dsave,saveFs) #clean up
+
+
+# *************************************** #
+# () Calculate metrics from spawning distribution
+# *************************************** #
+# script below generates df 'spawndistmetrics' which has metric info
+# keep only non-problem spp, convert numeric variables to numbers
+# add metric info to ts.data
+source("C:/Users/provo/Documents/GitHub/pfmc/src/spawning_distributions.r")
+spawndistmetrics <- spawndistmetrics[spawndistmetrics$problem_spp == "no",]
+spawndistmetrics$mode_age <- as.numeric(as.character(spawndistmetrics$mode_age))
+spawndistmetrics$sd_mode <- as.numeric(as.character(spawndistmetrics$sd_mode))
+spawndistmetrics$cvs_mode <- as.numeric(as.character(spawndistmetrics$cvs_mode))
+spawndistmetrics$maxage <- as.numeric(as.character(spawndistmetrics$maxage))
+spawndistmetrics$spp <- as.character(spawndistmetrics$spp)
+```
+
+```{r echo=FALSE, fig.width=5, fig.height=8, warning=FALSE}
+#tiff(file='C:/Users/provo/Documents/GitHub/pfmc/results/spawning_distribution_v2.tiff', units="in", width=12, height=9, res=300)
+do.call(grid.arrange,c(psub,ncol=2,left="Pr(spawning)"))
+#dev.off()
+```
+
+Figure 1. Distribution of spawning biomass across ages Dashed line and number indicate peak spawning age, standard deviation and coefficient of variation are listed at the top of each subplot. Distributions are probability of spawning at age: LEP-at-age/total LEP, where LEP-at-age is a function of egg production at age, probability of being mature, and survival from age 1 to age a.
+
+```{r echo=FALSE,fig.width=8, fig.height=4, warning=FALSE}
+
+peak_max <- ggplot(data=spawndistmetrics,aes(x=maxage,y=mode_age)) +
+  geom_point() +
+  geom_text_repel(data=spawndistmetrics,
+                  aes(label = spp),
+                  segment.color = "grey",
+                  size = 2,
+                  na.rm = TRUE)+
+  theme_classic() + ylab("Peak spawning age") + xlab("Maximum age") 
+  
+sd_max <- ggplot(data=spawndistmetrics,aes(x=maxage,y=sd_mode)) +
+  geom_point() +
+  geom_text_repel(data=spawndistmetrics,
+                  aes(label = spp),
+                  segment.color = "grey",
+                  size = 2,
+                  na.rm = TRUE)+
+  theme_classic() + ylab("Spawning distribution Stdev") + xlab("Maximum age") 
+grid.newpage()
+grid.draw(cbind(ggplotGrob(peak_max), ggplotGrob(sd_max), size = "last"))
+rm(peak_max,sd_max)
+```
+
+Figure 2. The relationship between (a) peak spawning age and maximum age, and (b) standard deviation of the spawning biomass distribution and maximum age. 
+
+<div style="margin-bottom:100px;">
+</div>
+
+```{r echo=FALSE,fig.width=8, fig.height=4,warning=FALSE}
+std_peak <- ggplot(data=spawndistmetrics,aes(x=mode_age,y=sd_mode)) +
+  geom_point() +
+  geom_text_repel(data=spawndistmetrics,
+                  aes(label = spp),
+                  segment.color = "grey",
+                  size = 2,
+                  na.rm = TRUE)+
+  theme_classic() + ylab("Spawning distribution Stdev") + xlab("Peak spawning age")
+
+cv_peak <- ggplot(data=spawndistmetrics,aes(x=mode_age,y=cvs_mode)) +
+  geom_point() +
+  geom_text_repel(data=spawndistmetrics,
+                  aes(label = spp),
+                  segment.color = "grey",
+                  size = 2,
+                  na.rm = TRUE)+
+  theme_classic() + ylab("Spawning distribution CV") + xlab("Peak spawning age")
+grid.newpage()
+grid.draw(cbind(ggplotGrob(std_peak), ggplotGrob(cv_peak), size = "last"))
+rm(std_peak,cv_peak)
+```
+
+Figure 3. (a) Standard deviation of spawning distribution vs peak spawning age. (b) Spawning distribution CV vs peak spawning age. 
+
+```{r include=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+
+# *************************************** #
+# (3) Simulate pops. Loop over Aarray list to simulate using different Leslie matrices 
+# *************************************** #
+# set params for simulation:
+# note: alpha > 1/LEP. Since I set LEP=1.1 for all spp, alpha must be > 1/1.1
+timesteps = 5000 #need this now to create
+rm_first_timesteps = 2000
+alphas = 1.2
+betas = 5000
+#sig_r = 0.3
+span.multiplier = 1 # adjusting the span in spec.prgm()
+EI=c(0,0.4,0.6,0.8)
+# generate noise vector
+set.seed(62) #Set the seed so that every simulation uses same random sequence
+whitenoise <- rnorm((timesteps-2),mean=0,sd=1)
+
+output.3d.list <- as.list(rep(NA,length=length(parms$spp))) #store timeseries here
+names(output.3d.list) <- parms$spp
+
+# load simulation model:
+source("C:/Users/provo/Documents/GitHub/pfmc/src/simulation_model.r")
+
+for (i in 1:length(A3d_list)) { #step through each pop
+  
+  if(parms[parms$spp == parms$spp[i],]$problem_spp == "yes") {#if a problem, then
+    problemshold <- parms$spp[i]} 
+  else {
+  
+    Leslie3d = A3d_list[[i]] #select the 3d array of Leslie matricies
+    
+    # array dims: row=ts length, col=3 is number of ts (eggs,recruits,Nsize), depth=F vals
+    output.matrix <- array(NA,c(timesteps-2,3,length(EI))) 
+  
+    for (f in 1:length(EI)) { #step through each Leslie matrix (for each F value)
+    
+      output = sim_model(A=Leslie3d[,,f], timesteps=timesteps, 
+                       alpha=alphas, beta=betas, 
+                       sig_r=0.3, initial_eggs=betas,
+                       noise=whitenoise)
+    
+      #length(output$Nsize) <- length(output$eggs) #trim Nsize ts vector, -1 elements
+      output.matrix[,,f] <- do.call(cbind,output) #fill in array for pop i
+      #colnames(output.matrix) <- names(output)
+  }
+  
+  output.3d.list[[i]] <- output.matrix
+  }#closes else bracket
+  print(i)
+}
+rm(i,f,output.matrix,output,problemshold) #clean up
+
+# At this point I have one important object:
+# 1. [output.3d.list] a list of 3d arrays. Each array is timeseries output
+#    from simulations at different F levels. 
+# keep only df in list for non-problem species
+output.3d.list <- output.3d.list[parms[parms$problem_spp == "no",]$spp]
+parms <- parms[parms$problem_spp == "no",]
+
+
+# *************************************** #
+# (5) Format output ts for plotting simulations using output.3d.list
+# *************************************** #
+variable_type <- c("eggs","recruits","Nsize")
+# --- reorganize recruit timeseries data --- #
+var.number <- which(variable_type == "recruits") # recruits
+df.list <- as.list(rep(NA,length=length(parms$spp)))
+names(df.list) <- parms$spp
+for (i in 1:length(output.3d.list)) {
+  if(parms[parms$spp == parms$spp[i],]$problem_spp == "yes") {#if a problem, then
+    problemshold <- parms$spp[i]} 
+  else { #if not problem spp, reformat data...
+  # ...to work with ggplot
+  aa <- as.data.frame(output.3d.list[[i]][,var.number,])
+  aa$year <- seq(from=1, to=length(aa[,1]),by=1)
+  colnames(aa) <- c(EI,"year")
+  aa1 <- aa %>% gather(EI,value,1:length(EI))
+  aa1$variable <- rep(variable_type[var.number],length=length(aa1[,1]))
+  aa1$spp <- rep(parms$spp[i],length=length(aa[,1]))
+  aa1$EI <- as.numeric(as.character(aa1$EI))
+  df.list[[i]] <- aa1
+  }
+  print(i)
+}
+
+# do some formatting on new parms
+parms$maxage <- as.numeric(parms$maxage)
+
+recruits.ts <- bind_rows(df.list,id=NULL)
+str(recruits.ts)
+rm(i,aa1,aa,var.number) #clean up
+ts.data <- recruits.ts
+ts.data$peak <- spawndistmetrics[match(ts.data$spp,spawndistmetrics$spp),"mode_age"]
+ts.data$cvs <- spawndistmetrics[match(ts.data$spp,spawndistmetrics$spp),"cvs_mode"]
+ts.data$maxage <- spawndistmetrics[match(ts.data$spp,spawndistmetrics$spp),"maxage"]
+
+
+# *************************************** #
+# (7) Now that timeseries data is formated, let's plot! 
+# *************************************** #
+#plot recruitment - one plot per spp
+str(ts.data)
+#vector of spp names in order of max age
+spp.ordered.maxage <- parms %>% arrange(maxage) %>% pull(spp)
+p.forappendix <- as.list(rep(NA,length=length(spp.ordered.maxage)))
+names(p.forappendix) <- spp.ordered.maxage
+
+for (i in 1:length(spp.ordered.maxage)){ #step through each spp i
+  # subset time series df 
+  dd <- ts.data[ts.data$variable == "recruits" & 
+                  ts.data$spp == spp.ordered.maxage[i] &
+                  ts.data$year %in% seq(from=rm_first_timesteps,to=(timesteps-100),by=1) &
+                  ts.data$EI %in% EI,] 
+  dd$EI <- as.factor(dd$EI)
+  
+  #subtract mean from ts, and adjust so all values are positive (makes it easier to interpet)
+  #dd$valueminusmean <- (dd$value-mean(dd$value))+500 
+  
+  p.forappendix[[i]] <- ggplot(dd[dd$year %in% 2000:2300,],aes(x=year,y=value, color=EI)) +
+    xlab("") + ylab("") +
+    geom_line() + theme_classic()  +
+    scale_color_brewer(palette = "Reds") +
+    #ylim(c(500,2800)) +
+    ggtitle(paste(spp.ordered.maxage[i]," maxage=",dd$maxage[1],sep="")) 
+  
+  
+    print(i)
+}
+```
+
+
+```{r echo=FALSE, fig.width=5, fig.height=8,warning=FALSE}
+tiff(file='C:/Users/provo/Documents/GitHub/pfmc/results/timeseries_v3.tiff', units="in", width=8, height=13, res=300) 
+do.call(grid.arrange,c(p.forappendix,ncol=2,left="Recruits (before noise)", bottom="Year"))
+dev.off()
+```
+
+Figure 4. Time series of recruits (before recruits experience noise) for PFMC species. No fishing is included in simulations. Lifetime egg production and recruitment variation is made constant for all species (LEP=1.1, sigmaR=0.3).
+
+<div style="margin-bottom:50px;">
+</div>
+
+```{r include=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# *************************************** #
+# (6) Calculate frequency content from timeseries
+# *************************************** #
+# Plan:
+# 1. Walk through each cod pop, do spectral analysis at beta levels
+# 2. Store spec values for eggs, recruits, and Nsize
+
+# 1. Walk through each cod pop, do spectral analysis at alpha levels
+#sp.eggsL <- as.list(rep(NA,length=length(codNames))) #object for spec analysis  
+sp.recruitLsm <- as.list(rep(NA,length=length(spp.ordered.maxage))) 
+span.multiplier= 1
+
+for (i in 1:length(spp.ordered.maxage)){
+  
+  ts <- ts.data[ts.data$spp == spp.ordered.maxage[i],] #subset data for pop i 
+  
+  # setting 'span' - a vector of odd integers to specify the smoothers
+  tmp <- ceiling(sqrt(length(1:(timesteps-rm_first_timesteps-1)))) #sq root of timeseries lgth, rounded
+  if (tmp %% 2 == 0) {m <- tmp+1} else {m <- tmp} #make it odd, if the square root is even
+  m = m * span.multiplier
+  
+  # --- spectral analysis on RECRUIT --- #
+  spsaveL <- as.list(rep(NA,length=length(EI)))
+  names(spsaveL) <- EI
+  
+  for (f in 1:length(EI)){
+    yy = ts %>% filter(EI == EI[f]) %>% select(value) %>% slice(rm_first_timesteps:(timesteps-2)) 
+    #meanyy = mean(rawyy$value)
+    #yy = rawyy$value-meanyy
+    
+    #sp = spec.pgram(yy$value,spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
+    sp = spec.pgram(yy$value,spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
+    spsaveL[[f]] = 2*sp$spec # 
+    print(f)
+  }
+  spsave <- as.data.frame(do.call(cbind,spsaveL))
+  spsave$freq <- sp$freq
+  spsavelong <- spsave %>% gather(EI, value, 1:length(EI))
+  spsavelong$spp.ordered.maxage <- rep(spp.ordered.maxage[i],length=length(spsavelong[,1]))
+  sp.recruitLsm[[i]] <- spsavelong
+  rm(spsave,yy,sp)
+  print(i)
+}
+
+recsm <- bind_rows(sp.recruitLsm,id=NULL)
+recsm$variable.type <- rep("recruits",length=length(recsm$freq))
+specdatalong <- recsm
+head(specdatalong)
+specdatalong$maxage <- spawndistmetrics[match(specdatalong$spp.ordered.maxage,spawndistmetrics$spp),"maxage"]
+specdatalong$cvs <- spawndistmetrics[match(specdatalong$spp.ordered.maxage,spawndistmetrics$spp),"cvs_mode"]
+specdatalong$peak <- spawndistmetrics[match(specdatalong$spp.ordered.maxage,spawndistmetrics$spp),"mode_age"]
+str(specdatalong)
+rm(recsm)
+specdatalong$EI <- as.numeric(specdatalong$EI)
+# *************************************** #
+# (6) Plot spectral analysis 
+# *************************************** #
+# --- recruits spectra --- #
+spec_plot <- list()
+
+for (i in 1:length(spp.ordered.maxage)){
+  dataforplot <- specdatalong[specdatalong$variable.type == "recruits" 
+                              & specdatalong$spp.ordered.maxage==spp.ordered.maxage[i]
+                              & specdatalong$EI == 0,] #plot spec for one EI value
+  
+  # plot:
+  spec_plot[[i]] <- ggplot(data=dataforplot, aes(x=freq,y=value)) + 
+    geom_line() + 
+    scale_y_log10(limits = c(-1,270000),breaks=c(100,10000)) +
+    #scale_y_log10() +
+    ggtitle(paste(spp.ordered.maxage[i],
+                  " maxage=",dataforplot$maxage[1],
+                  sep="")) + 
+    theme_classic() + ylab("") + xlab("") 
+}
+names(spec_plot) <- spp.ordered.maxage
+rm(i,dataforplot)
+```
+
+```{r echo=FALSE, fig.width=5, fig.height=8,warning=FALSE}
+#tiff(file='C:/Users/provo/Documents/GitHub/pfmc/results/spectra_v3_k0.1.tiff', units="in", width=7, height=13, res=300) 
+do.call(grid.arrange,c(spec_plot,ncol=2,left="Variance",bottom="Frequency"))
+#dev.off()
+```
+
+Figure 5. Spectra of recruitment time series. Smoother is `r m` years.
+
+<div style="margin-bottom:50px;">
+</div>
+
+```{r echo=FALSE, fig.width=5, fig.height=6,warning=FALSE}
+#tiff(file='C:/Users/provo/Documents/GitHub/pfmc/results/spectra_v1_maxage_k0.1.tiff', units="in", width=5, height=7, res=300)
+# Plot spectra on one plot:
+ggplot(data=specdatalong[specdatalong$Fvals == 0.1,], aes(x=freq,y=value,group=spp.ordered.maxage,color=maxage)) + 
+  geom_line() + 
+  scale_y_log10() +
+  theme_classic() + ylab("") + xlab("") 
+#dev.off()
+```
+
+Figure 6. Spectra of recruitment time series. Color indicates species maximum age. Smoother is `r m` years.
+
+<div style="margin-bottom:50px;">
+</div>
+
+```{r echo=FALSE, fig.width=5, fig.height=6,warning=FALSE}
+#tiff(file='C:/Users/provo/Documents/GitHub/pfmc/results/spectra_v1_cvs.tiff', units="in", width=6, height=7, res=300)
+ggplot(data=specdatalong[specdatalong$Fvals==0.1,], aes(x=freq,y=value,group=spp.ordered.maxage,color=cvs)) + 
+  geom_line() + 
+  scale_y_log10() +
+  theme_classic() + ylab("") + xlab("") 
+#dev.off()
+```
+
+Figure 7. Spectra of recruitment time series. Color indicates spawning distribution CV. Smoother is `r m` years.
+
+<div style="margin-bottom:50px;">
+</div>
+
+```{r echo=FALSE, fig.width=5, fig.height=6,warning=FALSE}
+#tiff(file='C:/Users/provo/Documents/GitHub/pfmc/results/spectra_v1_peak.tiff', units="in", width=6, height=7, res=300)
+ggplot(data=specdatalong[specdatalong$Fvals==0.1,], aes(x=freq,y=value,group=spp.ordered.maxage,color=peak)) + 
+  geom_line() + 
+  scale_y_log10() +
+  theme_classic() + ylab("") + xlab("") 
+#dev.off()
+```
+
+Figure 8. Spectra of recruitment time series. Color indicates species peak spawning age. Smoother is `r m` years.
+
+<div style="margin-bottom:50px;">
+</div>
+
+```{r include=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# *************************************** #
+# () Eigen plots
+# *************************************** #
+# Format eigen dfs
+# run again to get full parms df
+source("C:/Users/provo/Documents/GitHub/pfmc/src/life_table_calculations.r")
+eigenvals1 <- as.data.frame(eigan1)
+eigenvals12 <- as.data.frame(eigan12)
+names(eigenvals1) <- parms$spp
+names(eigenvals12) <- parms$spp
+e1long <- eigenvals1 %>% mutate(Fvals=Fvals) %>% gather("spp","value",1:20) %>% mutate(eigen="e1") 
+e12long <- eigenvals12 %>% mutate(Fvals=Fvals) %>% gather("spp","value",1:20) %>% mutate(eigen="e12")
+eigendata <- rbind(e1long,e12long)
+eigendata <- eigendata[eigendata$spp %in% parms[parms$problem_spp == "no",]$spp,]
+# fill in peak, max, sd, cvs in eigendata
+eigendata$maxage <- spawndistmetrics[match(eigendata$spp,spawndistmetrics$spp),"maxage"]
+eigendata$peak <- spawndistmetrics[match(eigendata$spp,spawndistmetrics$spp),"mode_age"]
+eigendata$cvs <- spawndistmetrics[match(eigendata$spp,spawndistmetrics$spp),"cvs_mode"]
+eigendata$std <- spawndistmetrics[match(eigendata$spp,spawndistmetrics$spp),"sd_mode"]
+rm(eigenvals1,eigenvals12,eigan1,eigan12,e1long,e12long)
+# filter out problem sp
+eigendata1 <- eigendata[eigendata$spp %in% parms$spp,]
+# try removing darkblotched
+#eigendata1 <- subset(eigendata1, spp!="darkblotched")
+```
+
+
+```{r echo=FALSE, fig.width=4, fig.height=9,warning=FALSE}
+lambda1 <- ggplot(eigendata1[eigendata1$eigen=="e1" & eigendata1$Fvals %in% selectedkvals,],
+                  aes(x=maxage,y=value)) +
+  geom_point() + 
+  geom_smooth(method="lm",se=FALSE,color="black") +
+  facet_grid(. ~ Fvals) +
+  scale_y_continuous(limits=c(0.6,1.05)) +
+  geom_text_repel(data=eigendata1[eigendata1$eigen=="e1"& eigendata1$Fvals %in% selectedkvals,],
+                  aes(label = spp),
+                  segment.color = "grey",
+                  size = 2,
+                  na.rm = TRUE) +
+  theme_bw() + 
+  theme(panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black"),
+        axis.title.y = element_text(angle = 0),
+        axis.text.x = element_text(angle = 40, hjust = 1)) +
+  ylab("a") +
+  xlab("Maximum age") +
+  ylab(expression(paste(lambda[1]))) 
+
+lambda12cv <- ggplot(eigendata1[eigendata1$eigen=="e12" & eigendata1$Fvals %in% selectedkvals,],
+                   aes(x=cvs,y=value)) +
+  geom_point() + 
+  geom_smooth(method="lm",se=FALSE,color="black") +
+  facet_grid(. ~ Fvals) +
+  scale_y_continuous(limits=c(0.6,1.05)) +
+  geom_text_repel(data=eigendata1[eigendata1$eigen=="e12"& eigendata1$Fvals %in% selectedkvals,],
+                  aes(label = spp),
+                  segment.color = "grey",
+                  size = 2,
+                  na.rm = TRUE) +
+  theme_bw() + 
+  theme(panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black"),
+        axis.title.y = element_text(angle = 0),
+        axis.text.x = element_text(angle = 40, hjust = 1)) +
+  ylab("b") +
+  xlab("CV of spawning biomass distribution") +
+  ylab(expression(paste(frac(abs(lambda[2]),lambda[1])))) 
+
+lambda12peak <- ggplot(eigendata1[eigendata1$eigen=="e12" & eigendata1$Fvals %in% selectedkvals,],
+                   aes(x=peak,y=value)) +
+  geom_point() + 
+  geom_smooth(method="lm",se=FALSE,color="black") +
+  facet_grid(. ~ Fvals) +
+  scale_y_continuous(limits=c(0.6,1.05)) +
+  geom_text_repel(data=eigendata1[eigendata1$eigen=="e12"& eigendata1$Fvals %in% selectedkvals,],
+                  aes(label = spp),
+                  segment.color = "grey",
+                  size = 2,
+                  na.rm = TRUE) +
+  theme_bw() + 
+  theme(panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black"),
+        axis.title.y = element_text(angle = 0),
+        axis.text.x = element_text(angle = 40, hjust = 1)) +
+  ylab("b") +
+  xlab("Peak spawning age") +
+  ylab(expression(paste(frac(abs(lambda[2]),lambda[1])))) 
+
+#tiff(file='C:/Users/provo/Documents/GitHub/pfmc/results/lambda1_12_max&CV.tiff', units="in", width=7, height=4, res=300)
+grid.newpage()
+grid.draw(rbind(ggplotGrob(lambda1), ggplotGrob(lambda12cv), ggplotGrob(lambda12peak), size = "last"))
+#dev.off()
+```
+
+Figure 9. (a) The relationship between Lambda 1 and longevity, (b) the inverse of the damping ratio (1/DR) versus spawning biomass distribution CV, and (c) 1/DR versus peak spawning age. 
+
+
+
+```{r include=FALSE, warning=FALSE, message=FALSE, error=FALSE}
+# *************************************** #
+# (10) Area under curve
+# *************************************** #
+head(specdatalong)
+# # Plan:
+# # 1. calculate AUC at high and low frequencies (threshold=peak spawning age, others)
+# # 2. plot %AUClow and %AUChigh vs peak spawning age 
+# # 3. plot %AUClow and %AUChigh vs max age
+# # 4. plot %AUClow and %AUChigh vs spawning distribution sd & CV
+
+freq <- specdatalong$freq[1]
+#threshold for high/low frequencies is 1/(2T) 
+spawndistmetrics$AUCthreshold <- 1/(spawndistmetrics$mode_age*2)
+AUCthreshold_ordered_by_max <- spawndistmetrics %>% arrange(maxage) %>% pull(AUCthreshold)
+#OR threshold could be the same for all pops:
+AUCthreshold_lowest <- rep(min(spawndistmetrics$AUCthreshold),length=length(spawndistmetrics$AUCthreshold))
+
+AUC_fraction_L <- as.list(rep(NA,length=length(Fvals)))
+AUCpercent_L <- as.list(rep(NA,length=length(Fvals)))
+AUC_total_L <- as.list(rep(NA,length=length(Fvals)))
+
+names(AUC_fraction_L) <- Fvals
+names(AUC_total_L) <- Fvals
+names(AUCpercent_L) <- Fvals
+
+for (j in 1:length(Fvals)){ #for each alpha (ie kval)...
+  
+  AUC_fraction <- rep(NA,length=length(spp.ordered.maxage))
+  AUC_total <- rep(NA,length=length(spp.ordered.maxage))
+  AUCpercent <- rep(NA,length=length(spp.ordered.maxage))
+  
+  for (i in 1:length(spp.ordered.maxage)){ #step through the pops
+    
+    # Check inequality sign for percent high or low variability
+    # multiple ht of each bar under curve by the width (one unit of x, freq)
+    AUC_fraction[i] <- sum(freq*specdatalong[specdatalong$variable.type == "recruits" 
+                                  & specdatalong$spp.ordered.maxage==spp.ordered.maxage[i]
+                                  & specdatalong$Fvals==Fvals[j]
+                                  & specdatalong$freq > AUCthreshold_ordered_by_max[i],]$value)
+                               # > is for %high, =< is for %low
+    # AUC_fraction[i] <- sum(freq*specdatalong[specdatalong$variable.type == "recruits" 
+    #                               & specdatalong$spp.ordered.maxage==spp.ordered.maxage[i]
+    #                               & specdatalong$Fvals==Fvals[j]
+    #                               & specdatalong$freq > AUCthreshold_lowest[i],]$value)
+    
+    AUC_total[i] <- sum(freq*specdatalong[specdatalong$variable.type == "recruits" 
+                                          & specdatalong$spp.ordered.maxage==spp.ordered.maxage[i]
+                                          & specdatalong$Fvals==Fvals[j],]$value)
+    AUCpercent[i] <- AUC_fraction[i]/AUC_total[i]
+    
+  }
+  #store percents for each k value
+  AUC_fraction_L[[j]] <- AUC_fraction 
+  AUC_total_L[[j]] <- AUC_total
+  AUCpercent_L[[j]] <- AUCpercent
+  print(j)
+}
+rm(i,j)
+AUC_fraction_df <- data.frame(do.call(cbind,AUC_fraction_L))
+AUC_total_df <- data.frame(do.call(cbind,AUC_total_L))
+AUCpercent_df <- data.frame(do.call(cbind,AUCpercent_L))
+
+AUC_fraction_df$spp.ordered.maxage <- spp.ordered.maxage
+AUC_total_df$spp.ordered.maxage <- spp.ordered.maxage
+AUCpercent_df$spp.ordered.maxage <- spp.ordered.maxage
+
+
+# convert dfs to long format
+AUC_fraction_dflong <- AUC_fraction_df %>% 
+  gather(Fvals,value,1:length(Fvals)) %>% 
+  separate(Fvals,c("addedX","Fvals"),sep="X") %>% 
+  select(-addedX) %>% 
+  mutate(AUCdes=rep("fraction"))
+AUC_total_dflong <- AUC_total_df %>% 
+  gather(Fvals,value,1:length(Fvals)) %>% 
+  separate(Fvals,c("addedX","Fvals"),sep="X") %>% 
+  select(-addedX) %>% 
+  mutate(AUCdes=rep("total"))
+AUCpercent_dflong <- AUCpercent_df %>% 
+  gather(Fvals,value,1:length(Fvals)) %>% 
+  separate(Fvals,c("addedX","Fvals"),sep="X") %>% 
+  select(-addedX) %>% 
+  mutate(AUCdes=rep("percent"))
+
+AUCdat <- rbind(AUC_fraction_dflong,
+                AUC_total_dflong,
+                AUCpercent_dflong)
+
+# add columns
+#eigentable$peakovermax <- round(eigentable$mode_age / eigentable$max_ages,digits=2)
+#AUCdat$peakovermax <- eigentable[match(AUCdat$codNames,eigentable$codNames),"peakovermax"]
+AUCdat$peak <- spawndistmetrics[match(AUCdat$spp.ordered.maxage,spawndistmetrics$spp),"mode_age"]
+AUCdat$maxage <- spawndistmetrics[match(AUCdat$spp.ordered.maxage,spawndistmetrics$spp),"maxage"]
+AUCdat$cvs <- spawndistmetrics[match(AUCdat$spp.ordered.maxage,spawndistmetrics$spp),"cvs_mode"]
+
+AUCdat$Fvals <- as.numeric(AUCdat$Fvals)
+AUCdat$spp_ordered_cv <- paste(AUCdat$spp.ordered.maxage,"(",AUCdat$cvs,")",sep="") #new col w/codName+cv
+AUCdat$spp_ordered_peak <- paste(AUCdat$spp.ordered.maxage,"(",AUCdat$peak,")",sep="") #new col w/peak
+AUCdat$spp_ordered_max <- paste(AUCdat$spp.ordered.maxage,"(",AUCdat$maxage,")",sep="")
+
+colnames(AUCdat)[1:2] <- c("spp","kval")
+
+# set factor levels
+AUCdat$kval <- factor(AUCdat$kval,levels=unique(AUCdat$kval))
+
+# set spp in order of CV
+spp_ordered_cv <- unique(AUCdat$spp_ordered_cv)
+spp_ordered_cv <- factor(spp_ordered_cv,
+                                  levels=unique(AUCdat[order(AUCdat$cvs),]$spp_ordered_cv))
+AUCdat$spp_ordered_cv <- factor(AUCdat$spp_ordered_cv,levels=levels(spp_ordered_cv))
+
+# set codNames in order of peak age
+spp_ordered_peak <- unique(AUCdat$spp_ordered_peak)
+spp_ordered_peak <- factor(spp_ordered_peak,
+                                   levels=unique(AUCdat[order(AUCdat$peak),]$spp_ordered_peak))
+AUCdat$spp_ordered_peak <- factor(AUCdat$spp_ordered_peak,
+                                       levels=levels(spp_ordered_peak))
+# set codNames in order of max age
+spp_ordered_max <- unique(AUCdat$spp_ordered_max)
+spp_ordered_max <- factor(spp_ordered_max,
+                                  levels=unique(AUCdat[order(AUCdat$maxage),]$spp_ordered_max))
+AUCdat$spp_ordered_max <- factor(AUCdat$spp_ordered_max,
+                                         levels=levels(spp_ordered_max))
+
+# *************************************** #
+# (Fig 5a) Total variance for different k values
+# (Fig 5b) % of low frequency variance
+# *************************************** #
+head(ts.data)
+colnames(ts.data)[2] <- "kval"
+ts.data$alpha <- round(1/(ts.data$kval*conLEP^2),digits=2)
+ts.data$alpha <- as.numeric(as.character(ts.data$alpha))
+
+
+varL = as.list(rep(NA,length=length(alphas))) 
+for(i in 1:length(spawndistmetrics$spp)){ # for each pop i
+  
+  #subset ts data to pop i only
+  dat <- ts.data[ts.data$spp == spawndistmetrics$spp[i] & 
+                 ts.data$variable == "recruits" & 
+                 ts.data$kval %in% round(1/(alphas*conLEP^2),digits=2),]
+  #store variance in ts data at different alpha levels
+  variance <- rep(NA,length=length(alphas))
+  #store mean of ts data at different alpha levels
+  means <- rep(NA,length=length(alphas))
+  
+  for(b in 1:length(alphas)){ #step through alpha values
+    
+    # calculate equilibrium value (mean) for each time series (rm first 200 ts)
+    means[b] <- mean(dat[dat$alpha == alphas[b],]$value[rm_first_timesteps:(timesteps-2)])
+    # substract mean from time series (vals_meanrm)
+    vals = dat[dat$alpha == alphas[b],]$value[rm_first_timesteps:(timesteps-2)] #- means[b]
+    # sq root the variance & then divide by mean 
+    variance[b] <- round(sqrt(var(vals))/means[b],digits=4)
+  
+  }
+  varL[[i]] <- as.data.frame(cbind(variance,alphas,rep(as.character(spawndistmetrics$spp[i]),length=length(alphas))))
+  names(varL[[i]]) <- c("variance","alpha","spp")
+}
+vardat <- do.call(rbind,varL)
+rm(i,b,dat,variance,means,vals) #clean up
+head(vardat)
+vardat$peak <- spawndistmetrics[match(vardat$spp,spawndistmetrics$spp),"mode_age"]
+vardat$kval <- round((1/(as.numeric(as.character(vardat$alpha))*conLEP^2)),digits = 2)
+vardat$cvs <- spawndistmetrics[match(vardat$spp,spawndistmetrics$spp),"cvs_mode"]
+vardat$maxage <- spawndistmetrics[match(vardat$spp,spawndistmetrics$spp),"maxage"]
+
+
+# set k slopes to factor, order by increasing slope
+vardat$kval <- factor(vardat$kval,levels=unique(vardat$kval))
+# make sure variance values are numeric
+vardat$variance <- as.numeric(as.character(vardat$variance))
+
+# create spp col ordered by CV
+vardat$spp_ordered_cv <- paste(vardat$spp,"(",vardat$cvs,")",sep="") #new col w/spp+cv
+spp_ordered_cv <- factor(unique(vardat$spp_ordered_cv),levels=unique(vardat[order(vardat$cvs),]$spp_ordered_cv))
+vardat$spp_ordered_cv <- factor(vardat$spp_ordered_cv,levels=levels(spp_ordered_cv))
+# create codNames col ordered by peak
+vardat$spp_ordered_peak <- paste(vardat$spp,"(",vardat$peak,")",sep="") #new col w/spp*peak
+spp_ordered_peak <- factor(unique(vardat$spp_ordered_peak),levels=unique(vardat[order(vardat$peak),]$spp_ordered_peak))
+vardat$spp_ordered_peak <- factor(vardat$spp_ordered_peak,levels=levels(spp_ordered_peak))
+# set codNames in order of max age
+vardat$spp_ordered_max <- paste(vardat$spp,"(",vardat$maxage,")",sep="") #new col w/spp*peak
+spp_ordered_max <- factor(unique(vardat$spp_ordered_max),levels=unique(vardat[order(vardat$maxage),]$spp_ordered_max))
+vardat$spp_ordered_max <- factor(vardat$spp_ordered_max,levels=levels(spp_ordered_max))
+
+# **********************************
+# Plot 1: lambda1 v total variance 
+# Plot 2: lambda2/1 v fraction high freq var
+# **********************************
+
+# Plot 1
+# Merge AUCdat and eigendata dfs based on codNames & kval
+colnames(eigendata)[1] <- "kval"
+totalvarL <- as.list(rep(NA,length=length(selectedkvals)))
+for(i in 1:length(selectedkvals)){
+
+  vardat1 <- vardat %>% filter(kval %in% selectedkvals[i]) 
+  vardat1$kval <- factor(vardat1$kval)
+  vardat1$spp <- as.character(vardat1$spp)
+  str(vardat1)
+  
+  eigendata1 <- eigendata %>% 
+    filter(kval %in% selectedkvals[i] & eigen=="e1") %>% 
+    select(kval,spp,value,eigen)
+  colnames(eigendata1)[which(names(eigendata1) == "value")] <- "value_e1"
+  eigendata1$kval <- factor(eigendata1$kval)
+  
+  vardat1$value_e1 <- eigendata1[match(vardat1$spp,eigendata1$spp),"value_e1"]
+  totalvarL[[i]] <- vardat1
+}
+totalvardf <- bind_rows(totalvarL,id=NULL)
+rm(eigendata1,vardat1)
+head(totalvardf)
+
+p1 <- ggplot(data=totalvardf,aes(x=value_e1,y=variance)) +
+  geom_point() + 
+  geom_smooth(method="lm",se=FALSE,color="black") +
+  facet_grid(. ~ kval) +
+  #scale_y_continuous(limits=c(0,1.1)) +
+  geom_text_repel(data=totalvardf,
+                  aes(label = spp),
+                  segment.color = "grey",
+                  size = 2,
+                  na.rm = TRUE) +
+  #geom_text(data=dat_rsq,mapping=aes(x=0.8,y=0.3,label=lab)) +
+  theme_bw() + 
+  theme(panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black"),
+        axis.title.y = element_text(angle = 0)) +
+  ylab(expression(paste(frac(sigma,"m")))) +
+  xlab(expression(paste(lambda[1]))) 
+ 
+
+# Plot 2
+# Merge AUCdat and eigendata dfs based on codNames & kval
+eigendata1 <- eigendata %>% 
+  filter(kval %in% selectedkvals & eigen=="e12") %>% 
+  select(kval,spp,value,eigen)
+colnames(eigendata1)[which(names(eigendata1) == "value")] <- "value_e12"
+eigendata1$kval <- as.factor(eigendata1$kval)
+AUCdat1 <- AUCdat %>% 
+  filter(kval %in% selectedkvals & AUCdes=="percent")
+AUCdat1$kval <- as.numeric(as.character(AUCdat1$kval))
+eigendata1$kval <- as.numeric(as.character(eigendata1$kval))
+AUC_e12 <- left_join(AUCdat1,eigendata1,all.x=TRUE)
+rm(eigendata1,AUCdat1)
+head(AUC_e12)
+
+p2 <- ggplot(data=AUC_e12,aes(x=value_e12,y=value)) +
+  geom_point() + 
+  geom_smooth(method="lm",se=FALSE,color="black") +
+  facet_grid(. ~ kval) +
+  #scale_y_continuous(limits=c(0,1.1)) +
+  geom_text_repel(data=AUC_e12,
+                  aes(label = spp),
+                  segment.color = "grey",
+                  size = 2,
+                  na.rm = TRUE) +
+  theme_bw() + 
+  theme(panel.grid.minor = element_blank(), 
+        axis.line = element_line(colour = "black"),
+        axis.title.y = element_text(angle = 90)) +
+  ylab("Fraction of high frequency variance") +
+  xlab(expression(paste(frac(abs(lambda[2]),lambda[1])))) 
+
+```
+
+```{r echo=FALSE, fig.width=4, fig.height=8,warning=FALSE}
+#tiff(file='C:/Users/provo/Documents/GitHub/popdy/cod_figures/manuscript3/fig6_eigens_vs_simoutput_sigR0.3_span1.5_oneoverpeakhighfreq.tiff', units="in", width=6, height=7, res=300) 
+grid.newpage()
+grid.draw(rbind(ggplotGrob(p1), ggplotGrob(p2), size = "last"))
+#dev.off()
+rm(p1,p2)
+```
+
+Figure 10. (a) Relationship between total variance in annual recruitment, represented as standard deviation divided by the mean, and λ_1 of the associated Jacobian matrix. (b) Relationship between fraction of high frequency variance and 1/DR. High frequencies include frequencies between 1/2T and 0.5. Moving from left to right panel.
+
+```{r echo=FALSE, fig.width=7, fig.height=4}
+fig5a <- ggplot(vardat,aes(x=kval,y=spp_ordered_max)) +
+  geom_raster(aes(fill=variance)) + 
+  xlab("Slope on egg-recruit curve at equilibrium (k)") + ylab("") +
+  scale_fill_gradient(low="purple", high="orange") + 
+  theme_classic() +
+  guides(fill=guide_legend(title="Standard deviation\nnormalized to\nthe mean", reverse=FALSE)) +
+  theme(axis.text.x = element_text(angle = 70, hjust = 1),
+        legend.position = "top",
+        plot.title = element_text(hjust = -0.5, vjust=-0.1),
+        legend.title = element_text(size = 8), 
+        legend.text = element_text(size = 8)) +
+  ylab("")
+
+# tiff(file='C:/Users/provo/Documents/GitHub/popdy/cod_figures/manuscript/fig5a_separate_kvals_sigR0.3_span1.5.tiff', units="in", width=11, height=6, res=300) 
+# p <- list(fig5a0.1,fig5a0.4,fig5a0.6,fig5a0.9)
+# do.call(grid.arrange,c(p,ncol=4))
+# dev.off()
+
+
+# (Fig 5b) Percent at high or low frequencies for different k values
+# could be high or low depending on if we used > or =<
+dataforplot <- AUCdat[AUCdat$AUCdes == "percent",]
+
+# get range of % when slope is small:
+min.per.k0.15 <- min(dataforplot[dataforplot$kval == 0.15,]$value)
+max.per.k0.15 <- max(dataforplot[dataforplot$kval == 0.15,]$value)
+
+# get range of % when slope is big:
+min.per.k0.85 <- min(dataforplot[dataforplot$kval == 0.85,]$value)
+max.per.k0.85 <- max(dataforplot[dataforplot$kval == 0.85,]$value)
+
+fig5b <- ggplot(data=dataforplot,aes(x=kval,y=spp_ordered_cv)) +
+  geom_raster(aes(fill=value)) + 
+  xlab("Slope on egg-recruit curve at equilibrium (k)") + ylab("") + 
+  scale_fill_gradient(low="purple", high="orange") + 
+  scale_colour_gradient(limits = c(0, 1)) +
+  theme_classic() +
+  guides(fill=guide_legend(title=paste("Fraction of high\nfreq variance\n(range 0.002-0.26)"))) +
+  theme(axis.text.x = element_text(angle = 70, hjust = 1),
+        legend.position="top",
+        plot.title = element_text(hjust = -0.5, vjust=-0.1),
+        legend.title = element_text(size = 8), 
+        legend.text = element_text(size = 8)) 
+  
+#tiff(file='C:/Users/provo/Documents/GitHub/popdy/cod_figures/manuscript3/fig5ab_highvar_MAX&CV_sigR0.3_span1.2_2.tiff', units="in", width=9, height=6, res=300) 
+grid.newpage()
+grid.draw(cbind(ggplotGrob(fig5a), ggplotGrob(fig5b), size = "last"))
+# f <- list(fig5a,fig5b)
+# do.call(grid.arrange,c(f,ncol=2))
+#dev.off()
+```
+
+Figure 11. Figure 4. (a) The color of each cell indicates the standard deviation of recruitment relative to mean recruitment for a single population at different values of k (slopes at equilibrium along the egg-recruit curve). Numbers in parentheses next to population names is longevity of that species, populations are ordered by decreasing maximum age. (b) Each cell represents the fraction of total variance in recruitment time series concentrated at high frequencies. High frequency is defined as frequencies between 1/2T and 0.5 for all populations. Numbers in parentheses indicate CV of the spawning biomass distribution, populations are ordered by decreasing CV. In both (a) and (b) dark purple colors represent lower values and bright orange represents higher values.

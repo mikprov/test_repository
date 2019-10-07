@@ -1,0 +1,31 @@
+---
+title: "README"
+author: "Mikaela Provost"
+date: "August 10, 2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Chapter 2: PFMC Species
+
+
+
+1. **RUN.r** -- This is the bulk of the analysis. Here I assemble Leslie matrices for different fishing values, simulate populations, calculate spectra, etc. This will change a lot and I should update the description in the README doc often. 
+
+2. **functions.r** -- Functions for...
++ converting age to length cm (Schnute and von B)
++ calculate prop mature at age
++ selectivity at age 
++ converting length to weight at age
++ calculating fecundity at age (2 versions)
++ assemble Leslie matrix (input is a bunch of -at-age vectors, output is A and life table). Need to run life_table_calculations.r before running assemble_Leslie()
+
+3. **life_table_calculations.r** -- This script calculates life table infomation needed to assemble Leslie matrices for different F values: L_a, B_a, propmat_a, eggs_a, vul_a. maxage & M are stored in parms df. Function: assemble_Leslie(maxage,L_a,B_a,propmat_a,eggs_a,vul_a,M).
+
+4. **parms.rmd** -- This needs some work, but I want to re-write all the information I stored in the gathering_parameters.doc in this markdown file for easier access. 
+
+5. **cross_check_with_assessments.rmd** -- Produces a markdown html of plots for species. Plots show different combinations of weight, length, maturity, and eggs at age. Main point of this was for me to double check that I was getting similar results as the assessments. Plots depend on **life_table_calculations.r** but this script is not necessary for analysis. 
+
