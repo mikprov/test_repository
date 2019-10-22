@@ -3,7 +3,7 @@ Mackerel,yes,eggsFUN_is_vector,coastalpelagic,Scomber japonicus,0.5,0.47,0.75,ch
 Sardine,no,NA,coastalpelagic,Sardinops sagax caerulea,0.4,0.8,0.75,length,15.44,-0.89252,7.52E-06,3.2332,,,vonb,10,25,0.5,999,0.4,0.318,-2.01,23.788,15,fun1,0,1,eggs_per_kg
 Yellowfin,yes,missing_all_parms,hms,Thunnus albacares,0.45,0.75,0.6,check,check,check,check,check,,,check,check,check,check,check,check,check,check,check,7,check,check,check,check
 Bigeye,yes,missing_all_parms,hms,Thunnus obesus,0.175,0.8,0.6,check,check,check,check,check,,,check,check,check,check,check,check,check,check,check,12,check,check,check,check
-Bluefin,no,missing_all_parms,hms,Thunnus orientalis,0.925,0.999,0.6,check,vector,vector,1.71E-05,3.0382,,,schnute,19.05,118.57,0,3,0.188,0.188,0.4217,249.92,26,fun1,0,1,eggs_per_kg
+Bluefin,yes,missing_all_parms,hms,Thunnus orientalis,0.925,0.999,0.6,check,vector,vector,1.71E-05,3.0382,,,schnute,19.05,118.57,0,3,0.188,0.188,0.4217,249.92,26,fun1,0,1,eggs_per_kg
 Bocaccio,yes,growth_fun_and_eggs_problems,groundfish,Sebastes paucispinis,0.15,0.773,1,length,37.7,-0.334,7.36E-06,3.1136,,,schnute,18.3,67.34,0.5,25,0.226,NA,NA,NA,34,fun2,20,254.9,eggs_per_kg
 Cabezon,no,NA,groundfish,Scorpaenichthys marmoratus,0.25,0.7,1,length,34.6,-0.7,9.18E-06,3.188,,,schnute,13.97,59,0,999,0.17,0.21,-1.28,58.97,13,fun1,0,1,eggs_per_kg
 Canary,no,NA,groundfish,Sebastes pinniger,0.0521,0.773,0.5,length,40.5,-0.25,1.55E-05,3.094,,,schnute,3.8,60.05,1,30,0.14,NA,NA,NA,84,fun1,21.7,261.9,eggs_per_kg

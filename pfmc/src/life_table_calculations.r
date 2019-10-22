@@ -8,9 +8,9 @@ library(dplyr)
 library(gridExtra)
 # ---
 # load functions
-source("C:/Users/provo/Documents/GitHub/pfmc/src/functions.r")
+source("C:/Users/Mikaela/Documents/GitHub/pfmc/src/functions.r")
 # load parms df
-parms = read.csv("C:/Users/provo/Documents/GitHub/pfmc/parms_data/pfmc_parms.csv",
+parms = read.csv("C:/Users/Mikaela/Documents/GitHub/pfmc/parms_data/pfmc_parms.csv",
                  header=TRUE,stringsAsFactors = FALSE)
 parms = as.data.frame(parms)
 # notes on parms: all cols may be 'chr' because of words used in columns for numbers. 

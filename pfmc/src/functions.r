@@ -229,7 +229,7 @@ calculate_F_from_EI <- function(EI,maxage,L_a,B_a,propmat_a,eggs_a,vul_a,M,Fvals
 
 # --------------------
 # (11) calculate F values for exploitation index - using Leslie matrix
-calculate_F_from_EI_Leslie <- function(A,vul_a,Fvals,M,EI){
+calculate_F_from_EI_Leslie <- function(A,vul_a,Fval,M,EI){
   
   #testing
   # out <- assemble_Leslie(maxage=as.numeric(parms$maxage[18]),
@@ -255,13 +255,13 @@ calculate_F_from_EI_Leslie <- function(A,vul_a,Fvals,M,EI){
   L = data.frame(cbind(Age,vul_a))  
   
   # survival at age for different F values
-  surv_at_age_by_F <- matrix(NA,nrow=length(Age),ncol=length(Fvals))
-  survivorship_by_F <- matrix(0, nrow=length(Age),ncol=length(Fvals))
-  LEP_at_age_by_F <- matrix(0,nrow=length(Age),ncol=length(Fvals))
-  for(f in 1:length(Fvals)){ # step through F values
+  surv_at_age_by_F <- matrix(NA,nrow=length(Age),ncol=length(Fval))
+  survivorship_by_F <- matrix(0, nrow=length(Age),ncol=length(Fval))
+  LEP_at_age_by_F <- matrix(0,nrow=length(Age),ncol=length(Fval))
+  for(f in 1:length(Fval)){ # step through F values
     
     for(a in 1:length(Age)) { #step through ages
-      Ftemp = L$vul_a[a]*Fvals[f]	# FISH: F rate = vulnerability-at-age * F  
+      Ftemp = L$vul_a[a]*Fval[f]	# FISH: F rate = vulnerability-at-age * F  
       surv_at_age_by_F[a,f] = exp(-(Ftemp+M)) #SURV:fraction surviving at each age
     } #closes loop calculating survival at age
     
@@ -284,7 +284,7 @@ calculate_F_from_EI_Leslie <- function(A,vul_a,Fvals,M,EI){
   # Get FLEP from LEP
   LEP <- colSums(LEP_at_age_by_F)
   FLEP <- LEP/LEP[1]
-  FLEP_by_F <- data.table(cbind(Fvals,FLEP))
+  FLEP_by_F <- data.table(cbind(Fval,FLEP))
   
   #What are corresponding FLEPs for EI values?
   FLEPs_of_interest <- data.frame((1-(EI*0.9)))
@@ -293,7 +293,7 @@ calculate_F_from_EI_Leslie <- function(A,vul_a,Fvals,M,EI){
 
   for(e in 1:length(FLEPs_of_interest[,1])){
     diff <- data.frame(cbind(FLEP_by_F, (FLEP_by_F$FLEP-FLEPs_of_interest$FLEP_EI[e])))
-    FLEPs_of_interest$matching_F[e] <- diff[which.min(abs(diff$V2)),]$Fvals
+    FLEPs_of_interest$matching_F[e] <- diff[which.min(abs(diff$V2)),]$Fval
     FLEPs_of_interest$diff[e] <- diff[which.min(abs(diff$V2)),]$V2
   }
   rm(LEP,FLEP,L,surv_at_age_by_F,survivorship_by_F,Ftemp,LEP_at_age_by_F,f,a,k,e,diff)
@@ -302,630 +302,242 @@ calculate_F_from_EI_Leslie <- function(A,vul_a,Fvals,M,EI){
 }
 
 
-# --------------------
-# (12) plot wavelet
-# this is the actual sample code to export plot (in Patrick's code)
-# tiff(file.path(".", "output_ms", "Fig3revised_100.tiff"),units="in", res=300, width = 6.85, height = 6.85)
-# #postscript(file.path(".", "output_ms", "Fig3revised_100.ps"), width = 6.85, height = 6.85)
-# # pdf(file.path(".", "output_ms", "Fig_3_summaryFreqContTS_Noise.pdf"), width = 6.85, height = 6.85)
-# plot_gen_freq_wvlt(noise = noiseList,
-#                    burn_in_pd = (burn_in + phasein_len),
-#                    num_rows2plt = 200,
-#                    n = plot_idx, 
-#                    J1 = trunc((log(32/(2 * 1))/log(2))/0.01))
-# dev.off()
 
-plot_gen_freq_wvlt <- function(noise = df.list, 
-                               burn_in_pd = rm_first_timesteps, #remove from beginning of ts
-                               num_rows2plt = 1000, #number of years to plot
-                               n = 1, #for indexing column n in noise df?
-                               J1 = trunc((log(32/(2 * 1))/log(2))/0.01),
-                               timesteps = timesteps,
-                               span.multiplier = 1,
-                               spp =  ) {
-  # ---
-  test = subset(parms[parms$problem_spp=="no",]$spp,select=c("spp","maxage"))
-  test$maxage <- as.numeric(test$maxage)
-  test <- test[order(test$maxage),]
-  spp <- test$spp
-  df.list <- df.list[spp] #set order
-  line_d <- 2 #which margin to start counting at zero, 2=left
-  ylim <- c(0,2)
-  tsylim <- c(3000,4500)
-  spwn_ylim <- c(0,0.35)
-  spwn_xlim <- c(0,110)
-  rows2plot <- (burn_in_pd+1):(burn_in_pd+num_rows2plt)
-  n_rows <- seq(from=1,to=length(rows2plot))
-  old <- par(mar = c(3,2,2,1), cex = .7)
-  # set Daniell smoother for frequency response plot
-  tmp <- ceiling(sqrt(length(1:(timesteps-burn_in_pd-1)))) #sq root of timeseries lgth, rounded
-  if (tmp %% 2 == 0) {m <- tmp+1} else {m <- tmp} #make it odd, if the square root is even
-  m = m * span.multiplier
+
+# --------------------
+# (13) Simulate population
+# Simulate a population given the: noise, harvest level (which FLEP?), 
+# threshold FLEP & calc mean for threshold level. Return: N, recruits,
+# eggs time series in large data frame for plotting.
+# Note: subset spp, List of Leslie3d to non-problem spp
+
+
+simulate_spp <- function(noise,
+                         timesteps,
+                         rm_first_timesteps, #burn in time
+                         alphas, #for BH
+                         betas, #for BH
+                         span.multiplier, #not sure I need this yet
+                         EIlevels, #vector of EI levels, 1st is OFL--match
+                         OFL, #FLEP associated with OFL
+                         List_of_Leslie3d, #should have F vals associated with FLEPlevels
+                         spp,
+                         sig_r) {
+  #Testing
+  # noise = white
+  # timesteps = 5000
+  # rm_first_timesteps = 2000 #burn in time
+  # alphas = 1.2 #for BH
+  # betas = 5000 #for BH
+  # span.multiplier = 1 #not sure I need this yet
+  # EIlevels = EIlevels #vector of EI levels, 1st is OFL--match
+  # OFL = EIlevels[3] #FLEP associated with OFL
+  # List_of_Leslie3d = A3d_list #should have F vals associated with FLEPlevels
+  # spp = parms[parms$problem_spp == "no",]$spp[1:3]
+  # sig_r=0.3
   
-  # mtext()
-  #side 2 is left
-  #las 1:horizontal 2:perpendicular to axis 3:vertical
-  #at position along y axis
-  #line on which MARgin line, starting at 0 counting outwards
-  # ---
+  # Loop over Aarray list to simulate using different Leslie matrices
+  # set params for simulation:
+  # Note: A3d_list --> each Leslie matrix in array is associated with F
+  # value that matches EI value. 
+  output.3d.list <- as.list(rep(NA,length=length(List_of_Leslie3d))) #store timeseries here
+  names(output.3d.list) <- spp
+  for (i in 1:length(List_of_Leslie3d)) { #step through each pop
+    Leslie3d = List_of_Leslie3d[[i]] #select the 3d array of Leslie matricies
+    # array dims: row=ts length, col=3 is number of ts (eggs,recruits,Nsize), depth=F vals
+    output.matrix <- array(NA,c(timesteps-2,3,length(Leslie3d[1,1,]))) 
+     for (f in 1:length(Leslie3d[1,1,])) { #step through each Leslie matrix (for each F value)
+      output = sim_model(A=Leslie3d[,,f], timesteps=timesteps, 
+                           alpha=alphas, beta=betas, 
+                           initial_eggs=betas,sig_r,
+                           noise=noise) #specify noise
+      output.matrix[,,f] <- do.call(cbind,output) #fill in array for pop i
+      }#close f loop
+   output.3d.list[[i]] <- output.matrix #store simulation output in list
+   print(i)
+  }#closes i loop for spp
   
-  tiff(file='C:/Users/provo/Documents/GitHub/pfmc/results/wvlet_panels_1-7_frqrsp_rotate_55_v2.tiff', units="in", width=8, height=11, res=300) 
+  # *************************************** #
+  # Format output ts for plotting simulations using output.3d.list
+  # At this point I have one important object:
+  # 1. [output.3d.list] a list of 3d arrays. Each array is timeseries output
+  #    from simulations at different F levels. 
+  variable_type <- c("eggs","recruits","Nsize")
+  # --- reorganize recruit timeseries data --- #
+  var.number <- which(variable_type == "recruits") # recruits
+  df.list <- as.list(rep(NA,length=length(spp)))
+  names(df.list) <- spp
+  for (i in 1:length(output.3d.list)) {
+    aa <- as.data.frame(output.3d.list[[i]][,var.number,])
+    aa$year <- seq(from=1, to=length(aa[,1]),by=1)
+    colnames(aa) <- c(EIlevels,"year")
+    aa1 <- aa %>% gather(EI,value,1:length(EIlevels))
+    aa1$variable <- rep(variable_type[var.number],length=length(aa1[,1]))
+    aa1$spp <- rep(spp[i],length=length(aa[,1]))
+    aa1$EI <- as.numeric(as.character(aa1$EI))
+    aa1$means <- rep(0,length=length(aa1[,1]))
+    means <- rep(0,length=length(unique(aa1$EI)))
+    for(f in 1:length(unique(aa1$EI))){
+      means[f] <- mean(aa1[aa1$EI==unique(aa1$EI)[f] &
+                             aa1$year %in% rm_first_timesteps:(timesteps-2),]$value)
+      aa1[aa1$EI==unique(aa1$EI)[f],]$means <- rep(means[f],
+                                                   length=length(aa1[aa1$EI==unique(aa1$EI)[f],1]))}
+    df.list[[i]] <- aa1
+    }
+  recruits.ts <- bind_rows(df.list,id=NULL)
+  recruits.ts$peak <- spawndistmetrics[match(recruits.ts$spp,spawndistmetrics$spp),"mode_age"]
+  recruits.ts$cvs <- spawndistmetrics[match(recruits.ts$spp,spawndistmetrics$spp),"cvs_mode"]
+  recruits.ts$maxage <- spawndistmetrics[match(recruits.ts$spp,spawndistmetrics$spp),"maxage"]
+  recruits.ts$stdev <- spawndistmetrics[match(recruits.ts$spp,spawndistmetrics$spp),"sd_mode"]
+  rm(i,f,means,aa1,aa,var.number,df.list) #clean up
   
-  par(mfrow=c(7,4),mai=c(0.2,0.3,0.2,0.2))
+  # --- reorganize egg timeseries data --- #
+  var.number <- which(variable_type == "eggs") # recruits
+  df.list <- as.list(rep(NA,length=length(spp)))
+  names(df.list) <- spp
+  for (i in 1:length(output.3d.list)) {
+    aa <- as.data.frame(output.3d.list[[i]][,var.number,])
+    aa$year <- seq(from=1, to=length(aa[,1]),by=1)
+    colnames(aa) <- c(EIlevels,"year")
+    aa1 <- aa %>% gather(EI,value,1:length(EIlevels))
+    aa1$variable <- rep(variable_type[var.number],length=length(aa1[,1]))
+    aa1$spp <- rep(spp[i],length=length(aa[,1]))
+    aa1$EI <- as.numeric(as.character(aa1$EI))
+    aa1$means <- rep(0,length=length(aa1[,1]))
+    means <- rep(0,length=length(unique(aa1$EI)))
+    for(f in 1:length(unique(aa1$EI))){
+      means[f] <- mean(aa1[aa1$EI==unique(aa1$EI)[f] &
+                             aa1$year %in% rm_first_timesteps:(timesteps-2),]$value)
+      aa1[aa1$EI==unique(aa1$EI)[f],]$means <- rep(means[f],
+                                                   length=length(aa1[aa1$EI==unique(aa1$EI)[f],1]))}
+    df.list[[i]] <- aa1
+    }
+  egg.ts <- bind_rows(df.list,id=NULL)
+  egg.ts$peak <- spawndistmetrics[match(egg.ts$spp,spawndistmetrics$spp),"mode_age"]
+  egg.ts$cvs <- spawndistmetrics[match(egg.ts$spp,spawndistmetrics$spp),"cvs_mode"]
+  egg.ts$maxage <- spawndistmetrics[match(egg.ts$spp,spawndistmetrics$spp),"maxage"]
+  egg.ts$stdev <- spawndistmetrics[match(egg.ts$spp,spawndistmetrics$spp),"sd_mode"]
+  rm(i,f,means,aa1,aa,var.number,df.list) #clean up
   
-  # --------------
-  # 1) White noise
-  # Label 
-  plot(1:10, type = "n", axes = F, xlab = "", ylab = "")
-  text(5,5, "white noise", cex = 1.3)
+  # --- reorganize N timeseries data --- #
+  var.number <- which(variable_type == "Nsize") # recruits
+  df.list <- as.list(rep(NA,length=length(spp)))
+  names(df.list) <- spp
+  for (i in 1:length(output.3d.list)) {
+    aa <- as.data.frame(output.3d.list[[i]][,var.number,])
+    aa$year <- seq(from=1, to=length(aa[,1]),by=1)
+    colnames(aa) <- c(EIlevels,"year")
+    aa1 <- aa %>% gather(EI,value,1:length(EIlevels))
+    aa1$variable <- rep(variable_type[var.number],length=length(aa1[,1]))
+    aa1$spp <- rep(spp[i],length=length(aa[,1]))
+    aa1$EI <- as.numeric(as.character(aa1$EI))
+    aa1$means <- rep(0,length=length(aa1[,1]))
+    means <- rep(0,length=length(unique(aa1$EI)))
+    for(f in 1:length(unique(aa1$EI))){
+      means[f] <- mean(aa1[aa1$EI==unique(aa1$EI)[f] &
+                             aa1$year %in% rm_first_timesteps:(timesteps-2),]$value)
+      aa1[aa1$EI==unique(aa1$EI)[f],]$means <- rep(means[f],
+                                                   length=length(aa1[aa1$EI==unique(aa1$EI)[f],1]))}
+    df.list[[i]] <- aa1
+  }
+  N.ts <- bind_rows(df.list,id=NULL)
+  N.ts$peak <- spawndistmetrics[match(N.ts$spp,spawndistmetrics$spp),"mode_age"]
+  N.ts$cvs <- spawndistmetrics[match(N.ts$spp,spawndistmetrics$spp),"cvs_mode"]
+  N.ts$maxage <- spawndistmetrics[match(N.ts$spp,spawndistmetrics$spp),"maxage"]
+  N.ts$stdev <- spawndistmetrics[match(N.ts$spp,spawndistmetrics$spp),"sd_mode"]
   
-  # Plot recruit time series
-  plot(x = n_rows,
-       y = whitenoise[rows2plot], cex=0.8, ylab="recruit",
-       type = "l", xaxs = "i", yaxs = "i")
-  #mtext("a", side = 2, las = 1, at = max(whitenoise), line = line_d, cex = 1.2)
+  #combine all 3 ts dfs
+  ts.data <- bind_rows(recruits.ts,egg.ts,N.ts)
+  return(ts.data)
+  rm(i,f,means,aa1,aa,var.number,df.list,recruits.ts,egg.ts,N.ts) #clean up
   
-  # plot wavelet power spectrum
-  white.wt <- wt(cbind(1:num_rows2plt, whitenoise[rows2plot]), 
-                 dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", 
-                 sig.test = 0, sig.level = 0.95)
-  plot(white.wt)
-  #mtext("b", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
+}
+
+
+# (14) Generate list of 3d Leslie arrays for different f levels
+# ***
+
+generate3dLeslie <- function(spp,Fvals,EIlevels){
+  # create empty matrices
+  A3d_list = as.list(rep(NA,length(spp))) #Leslie arrays in list
+  LTABLE_list <- as.list(rep(NA,length(spp))) #LTABLE arrays in list
+  names(A3d_list) <- spp
+  names(LTABLE_list) <- spp
+  eigan1 <- matrix(NA,nrow=length(Fvals),ncol=length(spp))
+  eigan12 <- matrix(NA,nrow=length(Fvals),ncol=length(spp))
+  LEPs <- matrix(NA,nrow=length(Fvals),ncol=length(spp))
+  constLEP <- matrix(NA,nrow=length(Fvals),ncol=length(spp))
+  EI_F_LEP1.1_L <- as.list(rep(NA,length=length(spp)))
+  names(EI_F_LEP1.1_L) <- spp
   
-  # Plot frequency response
-  #m = 55
-  p_spec <- spec.pgram(x=whitenoise,
-                       spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
-  plot(x=p_spec$freq,y=p_spec$spec,xaxs = "i", yaxs = "i",
-       type = "l",log="y",yaxt="n",ylab="")
-  #mtext("c", side = 2, las = 1, at = 0.5, line = line_d-1, cex = 1.2)
-  
-  
-  # --------------
-  # 2) Sardine
-  i=1
-  
-  # Label 
-  #par(fig=c(0, 0.15, 0.80, 1))
-  #plot(1:10, type = "n", axes = F, xlab = "", ylab = "")
-  #text(5,5, spp[i], cex = 1.3)
-  #text(5,5, "max age = ", cex = 1.3)
-  
-  # Plot spawning distribution
-  plot(x = spawning_dist_data[spawning_dist_data$spp == spp[i],]$Age,
-       y = spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn,
-       type = "l", ylim=spwn_ylim, xaxs = "i", yaxs = "i", cex=0.8, 
-       ylab="Age",xlab="p(spawning)",xlim=spwn_xlim)
-  text(x=100,y=0.2,label=paste(spp[i],"\nmax age=",parms[parms$spp==spp[i],]$maxage,
-                               "\nCV=",spawndistmetrics[spawndistmetrics$spp==spp[i],]$cvs_mode,sep=""),
-       cex=1.2,pos=2)
-  segments(x0=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-          x1=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-          y0=0,y1=0.33,lty=2,col="red",lwd=2)
-  
-  # Plot recruit time series
-  #par(fig=c(0.1, 0.4, 0.80, 1), new = TRUE)
-  plot(x = n_rows,
-       y = df.list[[i]][df.list[[i]]$EI == 0 & df.list[[i]]$year %in% rows2plot,]$value,
-       type = "l", ylim=tsylim, xaxs = "i", yaxs = "i", cex=0.8, ylab="recruit")
-  #mtext("d", side = 2, las = 1, at = max(tsylim), line = line_d, cex = 1.2)
-  
-  # plot wavelet power spectrum
-  #par(fig=c(0.4, 0.7, 0.80, 1), new = TRUE)
-  white.wt <- wt(cbind(1:num_rows2plt, 
-                       ts.data[ts.data$spp==spp[i] & 
-                                 ts.data$EI==0 & 
-                                 ts.data$year %in% rows2plot,]$value), 
-                 dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", 
-                 sig.test = 0, sig.level = 0.95)
-  plot(white.wt)
-  #mtext("e", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
-  
-  # Plot frequency response
-  #par(fig=c(0.7, 1, 0.8, 1), new = TRUE)
-  #m = as.numeric(parms[parms$spp == parms$spp[i],]$maxage)
-  p_spec <- spec.pgram(x=df.list[[i]][df.list[[i]]$EI == 0,]$value,
-                       spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
-  plot(x=p_spec$freq,y=p_spec$spec,xaxs = "i", yaxs = "i",
-       type = "l",log="y",yaxt="n",ylab="",ylim=c(2,270000),xlab="frequency")
-  axis(2,at=c(10,100,1000,10000))
-  #mtext("f", side = 2, las = 1, at = 0.5, line = line_d-1, cex = 1.2)
-  
-  
-  # --------------
-  # 3) Bluefin
-  i=2
-  # Label 
-  #plot(1:10, type = "n", axes = F, xlab = "", ylab = "")
-  #text(5,5, spp[i], cex = 1)
-  
-  # Plot spawning distribution
-  plot(x = spawning_dist_data[spawning_dist_data$spp == spp[i],]$Age,
-       y = spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn,
-       type = "l", ylim=spwn_ylim, xaxs = "i", yaxs = "i", cex=0.8, 
-       ylab="Age",xlab="p(spawning)",xlim=spwn_xlim)
-  text(x=100,y=0.2,label=paste(spp[i],"\nmax age=",parms[parms$spp==spp[i],]$maxage,
-                               "\nCV=",spawndistmetrics[spawndistmetrics$spp==spp[i],]$cvs_mode,sep=""),
-       cex=1.2,pos=2)
-  segments(x0=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           x1=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           y0=0,y1=0.33,lty=2,col="red",lwd=2)
-  # Plot recruit time series
-  plot(x = n_rows,
-       y = df.list[[i]][df.list[[i]]$EI == 0 & df.list[[i]]$year %in% rows2plot,]$value,
-       type = "l", ylim=tsylim, xaxs = "i", yaxs = "i", cex=0.8, ylab="recruit")
-       #mtext("g", side = 2, las = 1, at = max(tsylim), line = line_d, cex = 1.2)
-  # plot wavelet power spectrum
-  white.wt <- wt(cbind(1:num_rows2plt, 
-                       ts.data[ts.data$spp==spp[i] & 
-                                 ts.data$EI==0 & 
-                                 ts.data$year %in% rows2plot,]$value), 
-                 dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", 
-                 sig.test = 0, sig.level = 0.95)
-  plot(white.wt)
-  #mtext("h", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
-  # Plot frequency response
-  #m = as.numeric(parms[parms$spp == parms$spp[i],]$maxage)
-  p_spec <- spec.pgram(x=df.list[[i]][df.list[[i]]$EI == 0,]$value,
-                       spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
-  plot(x=p_spec$freq,y=p_spec$spec,xaxs = "i", yaxs = "i",
-       type = "l",log="y",yaxt="n",ylab="",ylim=c(2,270000),xlab="frequency")
-  axis(2,at=c(10,100,1000,10000))
-  #mtext("i", side = 2, las = 1, at = 0.5, line = line_d-1, cex = 1.2)
-  
-  # 4) Cabezon
-  i=3
-  # Label 
-  #plot(1:10, type = "n", axes = F, xlab = "", ylab = "")
-  #text(5,5, spp[i], cex = 1)
-  # Plot spawning distribution
-  plot(x = spawning_dist_data[spawning_dist_data$spp == spp[i],]$Age,
-       y = spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn,
-       type = "l", ylim=spwn_ylim, xaxs = "i", yaxs = "i", cex=0.8, 
-       ylab="Age",xlab="p(spawning)",xlim=spwn_xlim)
-  text(x=100,y=0.2,label=paste(spp[i],"\nmax age=",parms[parms$spp==spp[i],]$maxage,
-                               "\nCV=",spawndistmetrics[spawndistmetrics$spp==spp[i],]$cvs_mode,sep=""),
-       cex=1.2,pos=2)
-  segments(x0=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           x1=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           y0=0,y1=0.33,lty=2,col="red",lwd=2)
-  # Plot recruit time series
-  plot(x = n_rows,
-       y = df.list[[i]][df.list[[i]]$EI == 0 & df.list[[i]]$year %in% rows2plot,]$value,
-       type = "l", ylim=tsylim, xaxs = "i", yaxs = "i", cex=0.8, ylab="recruit")
-  #mtext("j", side = 2, las = 1, at = max(tsylim), line = line_d, cex = 1.2)
-  # plot wavelet power spectrum
-  white.wt <- wt(cbind(1:num_rows2plt, 
-                       ts.data[ts.data$spp==spp[i] & 
-                                 ts.data$EI==0 & 
-                                 ts.data$year %in% rows2plot,]$value), 
-                 dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", 
-                 sig.test = 0, sig.level = 0.95)
-  plot(white.wt)
-  #mtext("k", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
-  # Plot frequency response
-  #m = as.numeric(parms[parms$spp == parms$spp[i],]$maxage)
-  p_spec <- spec.pgram(x=df.list[[i]][df.list[[i]]$EI == 0,]$value,
-                       spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
-  plot(x=p_spec$freq,y=p_spec$spec,xaxs = "i", yaxs = "i",
-       type = "l",log="y",yaxt="n",ylab="",ylim=c(2,270000),xlab="frequency")
-  axis(2,at=c(10,100,1000,10000))
-  #mtext("l", side = 2, las = 1, at = 0.5, line = line_d-1, cex = 1.2)
-  
-  # 5) Canary
-  i=4
-  # Plot Label
-  #plot(1:10, type = "n", axes = F, xlab = "", ylab = "")
-  #text(5,5, spp[i], cex = 1)
-  # Plot spawning distribution
-  plot(x = spawning_dist_data[spawning_dist_data$spp == spp[i],]$Age,
-       y = spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn,
-       type = "l", ylim=spwn_ylim, xaxs = "i", yaxs = "i", cex=0.8, 
-       ylab="Age",xlab="p(spawning)",xlim=spwn_xlim)
-  text(x=100,y=0.2,label=paste(spp[i],"\nmax age=",parms[parms$spp==spp[i],]$maxage,
-                               "\nCV=",spawndistmetrics[spawndistmetrics$spp==spp[i],]$cvs_mode,sep=""),
-       cex=1.2,pos=2)
-  segments(x0=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           x1=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           y0=0,y1=0.33,lty=2,col="red",lwd=2)
-  # Plot recruit time series
-  plot(x = n_rows,
-       y = df.list[[i]][df.list[[i]]$EI == 0 & df.list[[i]]$year %in% rows2plot,]$value,
-       type = "l", ylim=tsylim, xaxs = "i", yaxs = "i", cex=0.8, ylab="recruit")
-  #mtext("m", side = 2, las = 1, at = max(tsylim), line = line_d, cex = 1.2)
-  # plot wavelet power spectrum
-  white.wt <- wt(cbind(1:num_rows2plt, 
-                       ts.data[ts.data$spp==spp[i] & 
-                                 ts.data$EI==0 & 
-                                 ts.data$year %in% rows2plot,]$value), 
-                 dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", 
-                 sig.test = 0, sig.level = 0.95)
-  plot(white.wt)
-  #mtext("n", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
-  # Plot frequency response
-  #m = as.numeric(parms[parms$spp == parms$spp[i],]$maxage)
-  p_spec <- spec.pgram(x=df.list[[i]][df.list[[i]]$EI == 0,]$value,
-                       spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
-  plot(x=p_spec$freq,y=p_spec$spec,xaxs = "i", yaxs = "i",
-       type = "l",log="y",yaxt="n",ylab="",ylim=c(2,270000),xlab="frequency")
-  axis(2,at=c(10,100,1000,10000))
-  #mtext("o", side = 2, las = 1, at = 0.5, line = line_d-1, cex = 1.2)
-  
-  # 6) Chilipepper
-  i=5
-  # Label 
-  #plot(1:10, type = "n", axes = F, xlab = "", ylab = "")
-  #text(5,5, spp[i], cex = 1)
-  # Plot spawning distribution
-  plot(x = spawning_dist_data[spawning_dist_data$spp == spp[i],]$Age,
-       y = spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn,
-       type = "l", ylim=spwn_ylim, xaxs = "i", yaxs = "i", cex=0.8, 
-       ylab="Age",xlab="p(spawning)",xlim=spwn_xlim)
-  text(x=100,y=0.2,label=paste(spp[i],"\nmax age=",parms[parms$spp==spp[i],]$maxage,
-                               "\nCV=",spawndistmetrics[spawndistmetrics$spp==spp[i],]$cvs_mode,sep=""),
-       cex=1.2,pos=2)
-  segments(x0=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           x1=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           y0=0,y1=0.33,lty=2,col="red",lwd=2)
-  # Plot recruit time series
-  plot(x = n_rows,
-       y = df.list[[i]][df.list[[i]]$EI == 0 & df.list[[i]]$year %in% rows2plot,]$value,
-       type = "l", ylim=tsylim, xaxs = "i", yaxs = "i", cex=0.8, ylab="recruit")
-  #mtext("p", side = 2, las = 1, at = max(tsylim), line = line_d, cex = 1.2)
-  # plot wavelet power spectrum
-  white.wt <- wt(cbind(1:num_rows2plt, 
-                       ts.data[ts.data$spp==spp[i] & 
-                                 ts.data$EI==0 & 
-                                 ts.data$year %in% rows2plot,]$value), 
-                 dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", 
-                 sig.test = 0, sig.level = 0.95)
-  plot(white.wt)
-  #mtext("q", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
-  # Plot frequency response
-  #m = as.numeric(parms[parms$spp == parms$spp[i],]$maxage)
-  p_spec <- spec.pgram(x=df.list[[i]][df.list[[i]]$EI == 0,]$value,
-                       spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
-  plot(x=p_spec$freq,y=p_spec$spec,xaxs = "i", yaxs = "i",
-       type = "l",log="y",yaxt="n",ylab="",ylim=c(2,270000),xlab="frequency")
-  axis(2,at=c(10,100,1000,10000))
-  #mtext("r", side = 2, las = 1, at = 0.5, line = line_d-1, cex = 1.2)
-  
-  # 7) Darkblotched
-  i=6
-  # Label 
-  #plot(1:10, type = "n", axes = F, xlab = "", ylab = "")
-  #text(5,5, spp[i], cex = 1)
-  # Plot spawning distribution
-  plot(x = spawning_dist_data[spawning_dist_data$spp == spp[i],]$Age,
-       y = spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn,
-       type = "l", ylim=spwn_ylim, xaxs = "i", yaxs = "i", cex=0.8, 
-       ylab="Age",xlab="p(spawning)",xlim=spwn_xlim)
-  text(x=100,y=0.2,label=paste(spp[i],"\nmax age=",parms[parms$spp==spp[i],]$maxage,
-                               "\nCV=",spawndistmetrics[spawndistmetrics$spp==spp[i],]$cvs_mode,sep=""),
-       cex=1.2,pos=2)
-  segments(x0=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           x1=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           y0=0,y1=0.33,lty=2,col="red",lwd=2)
-  # Plot recruit time series
-  plot(x = n_rows,
-       y = df.list[[i]][df.list[[i]]$EI == 0 & df.list[[i]]$year %in% rows2plot,]$value,
-       type = "l", ylim=tsylim, xaxs = "i", yaxs = "i", cex=0.8, ylab="recruit")
-  #mtext("s", side = 2, las = 1, at = max(tsylim), line = line_d, cex = 1.2)
-  # plot wavelet power spectrum
-  white.wt <- wt(cbind(1:num_rows2plt, 
-                       ts.data[ts.data$spp==spp[i] & 
-                                 ts.data$EI==0 & 
-                                 ts.data$year %in% rows2plot,]$value), 
-                 dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", 
-                 sig.test = 0, sig.level = 0.95)
-  plot(white.wt)
-  #mtext("t", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
- 
-  # Plot frequency response
-  #m = as.numeric(parms[parms$spp == parms$spp[i],]$maxage)
-  p_spec <- spec.pgram(x=df.list[[i]][df.list[[i]]$EI == 0,]$value,
-                       spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
-  plot(x=p_spec$freq,y=p_spec$spec,xaxs = "i", yaxs = "i",
-       type = "l",log="y",yaxt="n",ylab="",ylim=c(2,270000),xlab="frequency")
-  axis(2,at=c(10,100,1000,10000))
-  #mtext("u", side = 2, las = 1, at = 0.5, line = line_d-1, cex = 1.2)
-  
-  dev.off()
-  
-  # --------
-  tiff(file='C:/Users/provo/Documents/GitHub/pfmc/results/wvlet_panels_8-14_frqrsp_rotate_55_v2.tiff', units="in", width=8, height=11, res=300) 
-  
-  par(mfrow=c(7,4),mai=c(0.2,0.3,0.2,0.2))
-  # 8) Dover sole
-  i=7
-  # Label 
-  #plot(1:10, type = "n", axes = F, xlab = "", ylab = "")
-  #text(5,5, spp[i], cex = 1)
-  # Plot spawning distribution
-  plot(x = spawning_dist_data[spawning_dist_data$spp == spp[i],]$Age,
-       y = spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn,
-       type = "l", ylim=spwn_ylim, xaxs = "i", yaxs = "i", cex=0.8, 
-       ylab="Age",xlab="p(spawning)",xlim=spwn_xlim)
-  text(x=100,y=0.2,
-       label=paste(spp[i],"\nmax age=",parms[parms$spp==spp[i],]$maxage,
-                   "\nCV=",spawndistmetrics[spawndistmetrics$spp==spp[i],]$cvs_mode,sep=""),
-       cex=1.2,pos=2)
-  segments(x0=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           x1=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           y0=0,y1=0.33,lty=2,col="red",lwd=2)
-  # Plot recruit time series
-  plot(x = n_rows,
-       y = df.list[[i]][df.list[[i]]$EI == 0 & df.list[[i]]$year %in% rows2plot,]$value,
-       type = "l", ylim=tsylim, xaxs = "i", yaxs = "i", cex=0.8, ylab="recruit")
-  #mtext("v", side = 2, las = 1, at = max(tsylim), line = line_d, cex = 1.2)
-  # plot wavelet power spectrum
-  white.wt <- wt(cbind(1:num_rows2plt, 
-                       ts.data[ts.data$spp==parms$spp[i] & 
-                                 ts.data$EI==0 & 
-                                 ts.data$year %in% rows2plot,]$value), 
-                 dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", 
-                 sig.test = 0, sig.level = 0.95)
-  plot(white.wt)
-  #mtext("w", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
-  # Plot frequency response
-  #m = as.numeric(parms[parms$spp == parms$spp[i],]$maxage)
-  p_spec <- spec.pgram(x=df.list[[i]][df.list[[i]]$EI == 0,]$value,
-                       spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
-  plot(x=p_spec$freq,y=p_spec$spec,xaxs = "i", yaxs = "i",
-       type = "l",log="y",yaxt="n",ylab="",ylim=c(2,270000),xlab="frequency")
-  axis(2,at=c(10,100,1000,10000))
-  #mtext("x", side = 2, las = 1, at = 0.5, line = line_d, cex = 1.2)
-  
-  # 9) English
-  i=8
-  # Label 
-  #plot(1:10, type = "n", axes = F, xlab = "", ylab = "")
-  #text(5,5, spp[i], cex = 1)
-  # Plot spawning distribution
-  plot(x = spawning_dist_data[spawning_dist_data$spp == spp[i],]$Age,
-       y = spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn,
-       type = "l", ylim=spwn_ylim, xaxs = "i", yaxs = "i", cex=0.8, 
-       ylab="Age",xlab="p(spawning)",xlim=spwn_xlim)
-  text(x=100,y=0.2,
-       label=paste(spp[i],"\nmax age=",parms[parms$spp==spp[i],]$maxage,
-                   "\nCV=",spawndistmetrics[spawndistmetrics$spp==spp[i],]$cvs_mode,sep=""),
-       cex=1.2,pos=2)
-  segments(x0=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           x1=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           y0=0,y1=0.33,lty=2,col="red",lwd=2)
-  # Plot recruit time series
-  plot(x = n_rows,
-       y = df.list[[i]][df.list[[i]]$EI == 0 & df.list[[i]]$year %in% rows2plot,]$value,
-       type = "l", ylim=tsylim, xaxs = "i", yaxs = "i", cex=0.8, ylab="recruit")
-  #mtext("y", side = 2, las = 1, at = max(tsylim), line = line_d, cex = 1.2)
-  # plot wavelet power spectrum
-  white.wt <- wt(cbind(1:num_rows2plt, 
-                       ts.data[ts.data$spp==parms$spp[i] & 
-                                 ts.data$EI==0 & 
-                                 ts.data$year %in% rows2plot,]$value), 
-                 dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", 
-                 sig.test = 0, sig.level = 0.95)
-  plot(white.wt)
-  #mtext("z", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
-  # Plot frequency response
-  #m = as.numeric(parms[parms$spp == parms$spp[i],]$maxage)
-  p_spec <- spec.pgram(x=df.list[[i]][df.list[[i]]$EI == 0,]$value,
-                       spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
-  plot(x=p_spec$freq,y=p_spec$spec,xaxs = "i", yaxs = "i",
-       type = "l",log="y",yaxt="n",ylab="",ylim=c(2,270000),xlab="frequency")
-  axis(2,at=c(10,100,1000,10000))
-  #mtext("aa", side = 2, las = 1, at = 0.5, line = line_d, cex = 1.2)
-  
-  # 10) Lingcod
-  i=9
-  # Label 
-  #plot(1:10, type = "n", axes = F, xlab = "", ylab = "")
-  #text(5,5, spp[i], cex = 1)
-  # Plot spawning distribution
-  plot(x = spawning_dist_data[spawning_dist_data$spp == spp[i],]$Age,
-       y = spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn,
-       type = "l", ylim=spwn_ylim, xaxs = "i", yaxs = "i", cex=0.8, 
-       ylab="Age",xlab="p(spawning)",xlim=spwn_xlim)
-  text(x=100,y=0.2,
-       label=paste(spp[i],"\nmax age=",parms[parms$spp==spp[i],]$maxage,
-                   "\nCV=",spawndistmetrics[spawndistmetrics$spp==spp[i],]$cvs_mode,sep=""),
-       cex=1.2,pos=2)
-  segments(x0=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           x1=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           y0=0,y1=0.33,lty=2,col="red",lwd=2)
-  # Plot recruit time series
-  plot(x = n_rows,
-       y = df.list[[i]][df.list[[i]]$EI == 0 & df.list[[i]]$year %in% rows2plot,]$value,
-       type = "l", ylim=tsylim, xaxs = "i", yaxs = "i", cex=0.8, ylab="recruit")
-  #mtext("bb", side = 2, las = 1, at = max(tsylim), line = line_d, cex = 1.2)
-  # plot wavelet power spectrum
-  white.wt <- wt(cbind(1:num_rows2plt, 
-                       ts.data[ts.data$spp==parms$spp[i] & 
-                                 ts.data$EI==0 & 
-                                 ts.data$year %in% rows2plot,]$value), 
-                 dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", 
-                 sig.test = 0, sig.level = 0.95)
-  plot(white.wt)
-  #mtext("cc", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
-  # Plot frequency response
-  #m = as.numeric(parms[parms$spp == parms$spp[i],]$maxage)
-  p_spec <- spec.pgram(x=df.list[[i]][df.list[[i]]$EI == 0,]$value,
-                       spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
-  plot(x=p_spec$freq,y=p_spec$spec,xaxs = "i", yaxs = "i",
-       type = "l",log="y",yaxt="n",ylab="",ylim=c(2,270000),xlab="frequency")
-  axis(2,at=c(10,100,1000,10000))
-  #mtext("dd", side = 2, las = 1, at = 0.5, line = line_d-1, cex = 1.2)
-  
-  # 11) Hake
-  i=10
-  # Label 
-  #plot(1:10, type = "n", axes = F, xlab = "", ylab = "")
-  #text(5,5, spp[i], cex = 1)
-  # Plot spawning distribution
-  plot(x = spawning_dist_data[spawning_dist_data$spp == spp[i],]$Age,
-       y = spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn,
-       type = "l", ylim=spwn_ylim, xaxs = "i", yaxs = "i", cex=0.8, 
-       ylab="Age",xlab="p(spawning)",xlim=spwn_xlim)
-  text(x=100,y=0.2,
-       label=paste(spp[i],"\nmax age=",parms[parms$spp==spp[i],]$maxage,
-                   "\nCV=",spawndistmetrics[spawndistmetrics$spp==spp[i],]$cvs_mode,sep=""),
-       cex=1.2,pos=2)
-  segments(x0=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           x1=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           y0=0,y1=0.33,lty=2,col="red",lwd=2)
-  # Plot recruit time series
-  plot(x = n_rows,
-       y = df.list[[i]][df.list[[i]]$EI == 0 & df.list[[i]]$year %in% rows2plot,]$value,
-       type = "l", ylim=tsylim, xaxs = "i", yaxs = "i", cex=0.8, ylab="recruit")
-  #mtext("ee", side = 2, las = 1, at = max(tsylim), line = line_d, cex = 1.2)
-  # plot wavelet power spectrum
-  white.wt <- wt(cbind(1:num_rows2plt, 
-                       ts.data[ts.data$spp==parms$spp[i] & 
-                                 ts.data$EI==0 & 
-                                 ts.data$year %in% rows2plot,]$value), 
-                 dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", 
-                 sig.test = 0, sig.level = 0.95)
-  plot(white.wt)
-  #mtext("ff", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
-  # Plot frequency response
-  #m = as.numeric(parms[parms$spp == parms$spp[i],]$maxage)
-  p_spec <- spec.pgram(x=df.list[[i]][df.list[[i]]$EI == 0,]$value,
-                       spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
-  plot(x=p_spec$freq,y=p_spec$spec,xaxs = "i", yaxs = "i",
-       type = "l",log="y",yaxt="n",ylab="",ylim=c(2,270000),xlab="frequency")
-  axis(2,at=c(10,100,1000,10000))
-  #mtext("gg", side = 2, las = 1, at = 0.5, line = line_d-1, cex = 1.2)
-  
-  # 12) Petrale
-  i=11
-  # Label 
-  #plot(1:10, type = "n", axes = F, xlab = "", ylab = "")
-  #text(5,5, spp[i], cex = 1)
-  # Plot spawning distribution
-  plot(x = spawning_dist_data[spawning_dist_data$spp == spp[i],]$Age,
-       y = spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn,
-       type = "l", ylim=spwn_ylim, xaxs = "i", yaxs = "i", cex=0.8, 
-       ylab="Age",xlab="p(spawning)",xlim=spwn_xlim)
-  text(x=100,y=0.2,
-       label=paste(spp[i],"\nmax age=",parms[parms$spp==spp[i],]$maxage,
-                   "\nCV=",spawndistmetrics[spawndistmetrics$spp==spp[i],]$cvs_mode,sep=""),
-       cex=1.2,pos=2)
-  segments(x0=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           x1=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           y0=0,y1=0.33,lty=2,col="red",lwd=2)
-  # Plot recruit time series
-  plot(x = n_rows,
-       y = df.list[[i]][df.list[[i]]$EI == 0 & df.list[[i]]$year %in% rows2plot,]$value,
-       type = "l", ylim=tsylim, xaxs = "i", yaxs = "i", cex=0.8, ylab="recruit")
-  #mtext("hh", side = 2, las = 1, at = max(tsylim), line = line_d, cex = 1.2)
-  # plot wavelet power spectrum
-  white.wt <- wt(cbind(1:num_rows2plt, 
-                       ts.data[ts.data$spp==parms$spp[i] & 
-                                 ts.data$EI==0 & 
-                                 ts.data$year %in% rows2plot,]$value), 
-                 dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", 
-                 sig.test = 0, sig.level = 0.95)
-  plot(white.wt)
-  #mtext("ii", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
-  # Plot frequency response
-  #m = as.numeric(parms[parms$spp == parms$spp[i],]$maxage)
-  p_spec <- spec.pgram(x=df.list[[i]][df.list[[i]]$EI == 0,]$value,
-                       spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
-  plot(x=p_spec$freq,y=p_spec$spec,xaxs = "i", yaxs = "i",
-       type = "l",log="y",yaxt="n",ylab="",ylim=c(2,270000),xlab="frequency")
-  axis(2,at=c(10,100,1000,10000))
-  #mtext("jj", side = 2, las = 1, at = 0.5, line = line_d-1, cex = 1.2)
-  
-  # 13) Sablefish
-  i=12
-  # Label 
-  #plot(1:10, type = "n", axes = F, xlab = "", ylab = "")
-  #text(5,5, spp[i], cex = 1)
-  # Plot spawning distribution
-  plot(x = spawning_dist_data[spawning_dist_data$spp == spp[i],]$Age,
-       y = spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn,
-       type = "l", ylim=spwn_ylim, xaxs = "i", yaxs = "i", cex=0.8, 
-       ylab="Age",xlab="p(spawning)",xlim=spwn_xlim)
-  text(x=100,y=0.2,
-       label=paste(spp[i],"\nmax age=",parms[parms$spp==spp[i],]$maxage,
-                   "\nCV=",spawndistmetrics[spawndistmetrics$spp==spp[i],]$cvs_mode,sep=""),
-       cex=1.2,pos=2)
-  segments(x0=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           x1=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           y0=0,y1=0.33,lty=2,col="red",lwd=2)
-  # Plot recruit time series
-  plot(x = n_rows,
-       y = df.list[[i]][df.list[[i]]$EI == 0 & df.list[[i]]$year %in% rows2plot,]$value,
-       type = "l", ylim=tsylim, xaxs = "i", yaxs = "i", cex=0.8, ylab="recruit")
-  #mtext("kk", side = 2, las = 1, at = max(tsylim), line = line_d, cex = 1.2)
-  # plot wavelet power spectrum
-  white.wt <- wt(cbind(1:num_rows2plt, 
-                       ts.data[ts.data$spp==parms$spp[i] & 
-                                 ts.data$EI==0 & 
-                                 ts.data$year %in% rows2plot,]$value), 
-                 dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", 
-                 sig.test = 0, sig.level = 0.95)
-  plot(white.wt)
-  #mtext("ll", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
-  # Plot frequency response
-  #m = as.numeric(parms[parms$spp == parms$spp[i],]$maxage)
-  p_spec <- spec.pgram(x=df.list[[i]][df.list[[i]]$EI == 0,]$value,
-                       spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
-  plot(x=p_spec$freq,y=p_spec$spec,xaxs = "i", yaxs = "i",
-       type = "l",log="y",yaxt="n",ylab="",ylim=c(2,270000),xlab="frequency")
-  axis(2,at=c(10,100,1000,10000))
-  #mtext("mm", side = 2, las = 1, at = 0.5, line = line_d-1, cex = 1.2)
-  
-  # 14) Widow
-  i=13
-  # Label 
-  #plot(1:10, type = "n", axes = F, xlab = "", ylab = "")
-  #text(5,5, spp[i], cex = 1)
-  # Plot spawning distribution
-  plot(x = spawning_dist_data[spawning_dist_data$spp == spp[i],]$Age,
-       y = spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn,
-       type = "l", ylim=spwn_ylim, xaxs = "i", yaxs = "i", cex=0.8, 
-       xlab="Age",ylab="p(spawning)",xlim=spwn_xlim)
-  text(x=100,y=0.2,label=paste(spp[i],"\nmax age=",parms[parms$spp==spp[i],]$maxage,
-                               "\nCV=",spawndistmetrics[spawndistmetrics$spp==spp[i],]$cvs_mode,sep=""),
-                               cex=1.2,pos=2)
-  segments(x0=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           x1=which.max(spawning_dist_data[spawning_dist_data$spp == spp[i],]$p_spawn),
-           y0=0,y1=0.33,lty=2,col="red",lwd=2)
-  # Plot recruit time series
-  plot(x = n_rows,
-       y = df.list[[i]][df.list[[i]]$EI == 0 & df.list[[i]]$year %in% rows2plot,]$value,
-       type = "l", ylim=tsylim, xaxs = "i", yaxs = "i", cex=0.8, ylab="recruit")
-  #mtext("nn", side = 2, las = 1, at = max(tsylim), line = line_d, cex = 1.2)
-  # plot wavelet power spectrum
-  white.wt <- wt(cbind(1:num_rows2plt, 
-                       ts.data[ts.data$spp==parms$spp[i] & 
-                                 ts.data$EI==0 & 
-                                 ts.data$year %in% rows2plot,]$value), 
-                 dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", 
-                 sig.test = 0, sig.level = 0.95)
-  plot(white.wt)
-  #mtext("oo", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
-  # Plot frequency response
-  #m = as.numeric(parms[parms$spp == parms$spp[i],]$maxage)
-  p_spec <- spec.pgram(x=df.list[[i]][df.list[[i]]$EI == 0,]$value,
-                       spans=c(m,m),taper=0.1,plot = FALSE,demean = TRUE)
-  plot(x=p_spec$freq,y=p_spec$spec,xaxs = "i", yaxs = "i",
-       type = "l",log="y",yaxt="n",ylab="",ylim=c(2,270000),xlab="frequency")
-  axis(2,at=c(10,100,1000,10000))
-  #mtext("pp", side = 2, las = 1, at = 0.5, line = line_d-1, cex = 1.2)
-  
-  dev.off()
-  
-  
-  # # plot wavelet power spectrum
-  # par(fig=c(0.55, 0.9, 0, 0.2), new = TRUE)
-  # p_one_over_f.wt <- wt(cbind(1:num_rows2plt, noiseList[[5]][rows2plot,n]), dj = 0.01, J1 = J1, max.scale = 32, mother = "morlet", sig.test = 0, sig.level = 0.95)
-  # plot(p_one_over_f.wt, xlab = "Year")
-  # mtext("j", side = 2, las = 1, at = 1, line = line_d-1, cex = 1.2)
-  # 
-  # par(fig=c(0.4, 1, 0, 1), new = TRUE)
-  # image.plot(legend.only = TRUE, zlim = c(0,64), add = FALSE) 
-  # par(old)
-  # 
-} # end plot_gen_freq_wvlt
+  system.time(for (i in 1:length(spp)){ #for each spp
+    # define parms for spp i
+    M = as.numeric(parms[parms$spp == spp[i],]$M)
+    maxage = as.numeric(parms[parms$spp == spp[i],]$maxage)
+    
+    # create empty arrays for Leslie and LTABLE, vectors for eigens 
+    A3d <- array(NA,c(maxage,maxage,length(Fvals)))
+    LTABLE3d <- array(NA,c(maxage,15,length(Fvals))) 
+    e1 <- rep(NA,length=length(Fvals))
+    e2 <- rep(NA,length=length(Fvals))
+    e12 <- rep(NA,length=length(Fvals))
+    lep <- rep(NA,length=length(Fvals))
+    
+    # assemble Leslie for each value of Fvals
+    for(f in 1:length(Fvals)){
+      out <- assemble_Leslie(maxage=maxage,
+                             L_a=La_list[spp][[i]],
+                             B_a=Ba_list[spp][[i]],
+                             propmat_a=prop_list[spp][[i]],
+                             eggs_a=eggs_list[spp][[i]],
+                             vul_a=vul_list[spp][[i]],
+                             M=M,
+                             Fval=Fvals[f]) #F=0, change this if want fishing
+      LTABLE3d[,,f] <- data.matrix(out$LTABLE) #store LTABLE in 3d array
+      # calculate LEP at F=0 (use this value of LEP to standardize unfished fecundity)
+      lep_unfished = sum(out$LTABLE$LEP_a)
+      # Asim: adjust fecundities so LEP equal for all species - simulation matrix
+      Asim <- out$A
+      Asim[1,] <- (Asim[1,]/(lep_unfished*adjFec))
+      A3d[,,f] <- Asim
+      # Aeig: adjust fecundities and multiply by k - eigen analysis matrix
+      Aeig <- out$A
+      Aeig[1,] <- (Aeig[1,]/(lep_unfished*adjFec)) # *Fvals[f]
+      
+      # re-calculate adjusted LEP w/o F (should equal conLEP)
+      term <- rep(NA,length=maxage)
+      for(a in 1:maxage){term[a] <- Asim[1,a]*out$LTABLE$Survship[a]} #fecundity*survivorship
+      constLEP[f,i] <- sum(term) #plotting 'term' is the spawning distribution over age
+      rm(term,a)
+      
+      # calculate adjusted LEP w/F
+      term <- rep(NA,length=maxage)
+      for(a in 1:maxage){term[a] <- Asim[1,a]*out$LTABLE$Survship_Fing[a]} #fec*survshp w/F
+      LEPs[f,i] <- sum(term)
+      rm(term,a)
+      
+      # extract lambda1, lambda2/lambda1
+      e1[f] = extract_first_eigen_value(Aeig)
+      e2[f] = extract_second_eigen_value(Aeig)
+      e12[f] = e2[f] / e1[f]    } #closes F loop
+   
+      EI_F_LEP1.1_L[[i]] <- calculate_F_from_EI_Leslie(A=A3d[,,1],
+                                                       vul_a=vul_list[spp][[i]],
+                                                       Fval=Fvals,
+                                                       M=M,
+                                                       EI=EIlevels)
+      saveFs <- which(Fvals %in% EI_F_LEP1.1_L[[i]]$matching_F) #where are Fs of interest?
+      A3dsave <- A3d[,,saveFs] #save only Leslie matrices that match Fs
+      
+      A3d_list[[i]] <- A3dsave 
+      LTABLE_list[[i]] <- LTABLE3d
+      eigan1[,i] <- e1
+      eigan12[,i] <- e12
+      LEPs[,i] <- lep
+      #clean up before next i in loop
+      rm(A3d,A3dsave,LTABLE3d,e1,e12,lep,out,M,maxage,saveFs) 
+      print(spp[i]) #which spp did I finish?
+    
+  }) #closes spp loop
+  return(A3d_list)
+}#closes function

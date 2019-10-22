@@ -5,10 +5,10 @@
 # x axis = age
 
 # run life table information and load functions
-source("C:/Users/provo/Documents/GitHub/pfmc/src/life_table_calculations.r")
+source("C:/Users/Mikaela/Documents/GitHub/pfmc/src/life_table_calculations.r")
 
 # load parms df
-parms = read.csv("C:/Users/provo/Documents/GitHub/pfmc/parms_data/pfmc_parms.csv",
+parms = read.csv("C:/Users/Mikaela/Documents/GitHub/pfmc/parms_data/pfmc_parms.csv",
                  header=TRUE,stringsAsFactors = FALSE)
 parms = as.data.frame(parms)
 # remove problem species:
@@ -90,7 +90,7 @@ rm(spp,problem_spp,i,Age,p_spawn,keep,out,maxage,L_a,B_a,propmat_a,vul_a,M,spawn
 #rm(p)
 psub <- p[parms[parms$problem_spp == "no",]$spp]
 
-#tiff(file='C:/Users/provo/Documents/GitHub/pfmc/results/spawning_distribution_v2.tiff', units="in", width=12, height=9, res=300)
+#tiff(file='C:/Users/Mikaela/Documents/GitHub/pfmc/results/spawning_distribution_v2.tiff', units="in", width=12, height=9, res=300)
 #do.call(grid.arrange,c(psub,ncol=4,top="LEP-at-age/total LEP, where LEP-at-age = eggs-at-age*p(mature-at-age)*survival-to-that-age",left="Pr(spawning)"))
 #dev.off()
 
