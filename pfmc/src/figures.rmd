@@ -1,0 +1,462 @@
+---
+title: "Chapter 2 Figures"
+author: "Mikaela M. Provost"
+date: "11/25/2019"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+```{r echo=FALSE, include=FALSE, warning=FALSE}
+# prep for plotting
+
+source("C:/Users/Mikaela/Documents/GitHub/pfmc/src/RUN.r")
+
+# data frames produce in 'RUN' needed for figures:
+# Figure 1 - spawning_dist_data, ts.spec, ts.data
+# Figure 2 - noisetypes (a list of vectors)
+# Figure 3 - ts.spec, ts.data, probdf
+# Figure 4 - ts.spec, ts.data, probdf
+# Figure 5 - 
+
+burn_in_pd = rm_first_timesteps #remove from beginning of ts
+num_rows2plt = 1000 #number of years to plot
+timesteps = timesteps
+span.multiplier = 1
+ts.data = ts.data #timeseries dataset
+ts.spec = ts.spec #spectrum dataset
+spawning_dist_data=spawning_dist_data
+rows2plot <- (burn_in_pd+1):(burn_in_pd+num_rows2plt)
+J1 = trunc((log(32/(2 * 1))/log(2))/0.01)
+test = subset(parms[parms$problem_spp=="no",],select=c("spp","maxage"))
+test$maxage <- as.numeric(test$maxage)
+test <- test[order(test$maxage),]
+spp <- test$spp #put spp in order of max age
+spp_3_fig1 <- spp[c(2,5,12)] 
+spp_3_intext <- c("Sardine","Chilipepper rockfish","Darkblotched rockfish")
+rm(test)
+# ---
+
+# Axis limits for plots:
+# tsylim <- c(min(ts.data[ts.data$year %in% rows2plot &
+#                           ts.data$EI==0 &
+#                           ts.data$variable=="Nsize" &
+#                           ts.data$spp %in% spp_3_fig1,]$value ),
+#             max(ts.data[ts.data$year %in% rows2plot &
+#                           ts.data$EI==0 &
+#                           ts.data$variable=="Nsize"&
+#                           ts.data$spp %in% spp_3_fig1,]$value))
+tsylim <-c(5000,250000) # also based on eyeballing from code above
+specNlim <- c(min(ts.spec[ts.spec$EI==0 & 
+                          ts.spec$variable=="Nsize" &
+                          ts.spec$spp %in% spp_3_fig1,]$specN),0.025) # based on eyeballing
+specNlim <- c(0.000005,0.025)
+speclim <- c(min(ts.spec[ts.spec$EI==0 & 
+                         ts.spec$variable=="Nsize" &
+                         ts.spec$spp %in% spp_3_fig1,]$spec),
+               max(ts.spec[ts.spec$EI==0 & ts.spec$variable=="Nsize",]$spec))
+spwn_ylim <- c(0,0.35) #ylimits for spawning biomass dist
+spwn_xlim <- c(0,110)  #xlimits for spawning biomass dist
+n_rows <- seq(from=1,to=length(rows2plot))
+specminval <- as.numeric(min(ts.spec$specN))
+specmaxval <- as.numeric(max(ts.spec$specN))
+# ---
+```
+
+```{r echo=FALSE, fig.width=7, fig.height=8, warning=FALSE}
+# Figure 1
+par(mfrow=c(3,3),mar=c(3,3,3,3))
+
+ADG <- c("a)","d)","g)")
+BEH <- c("b)","e)","h)")
+CFI <- c("c)","f)","i)")
+
+for (i in 1:length(spp_3_fig1)) {  
+# (A) Plot spawning distribution
+plot(x = spawning_dist_data[spawning_dist_data$spp == spp_3_fig1[i],]$Age,
+     y = spawning_dist_data[spawning_dist_data$spp == spp_3_fig1[i],]$p_spawn,
+     type = "l", ylim=spwn_ylim, xlim=spwn_xlim,ylab="",xlab="", 
+     xaxs = "i", yaxs="i", cex=0.8) 
+title(ylab="pr(spawn)",line=2)
+title(xlab="Age",line=2)
+title(main=ADG[i],line=1,adj=0)
+text(x=100,y=0.2,
+     label=paste(spp_3_fig1[i],"\nMax age=",parms[parms$spp==spp_3_fig1[i],]$maxage,
+                 "\nPeak spawning age=",
+                 spawndistmetrics[spawndistmetrics$spp==spp_3_fig1[i],]$mode_age,
+                 "\nCV=",spawndistmetrics[spawndistmetrics$spp==spp_3_fig1[i],]$cvs_mode,
+                 sep=""),cex=1.2,pos=2)
+segments(x0=which.max(spawning_dist_data[spawning_dist_data$spp == spp_3_fig1[i],]$p_spawn),
+         x1=which.max(spawning_dist_data[spawning_dist_data$spp == spp_3_fig1[i],]$p_spawn),
+         y0=0,y1=0.33,lty=2,col="red",lwd=2)
+# (B) Plot frequency response
+plot(x=ts.spec[ts.spec$spp==spp_3_fig1[i] &
+               ts.spec$noise=="white" &
+               ts.spec$variable=="Nsize" &
+               ts.spec$EI==0,]$freq,
+     y=ts.spec[ts.spec$spp==spp_3_fig1[i] &
+               ts.spec$noise=="white" &
+               ts.spec$variable=="Nsize" &
+               ts.spec$EI==0,]$specN,
+     xlim=c(0,0.5),ylim=specNlim,type = "l",ylab="",
+     xlab="",log="y",yaxs="i")
+title(ylab="log(power)",line=2)
+title(xlab="Frequency",line=2)
+title(main=BEH[i],line=1,adj=0)
+# (C) Plot SSB time series
+plot(x = n_rows,
+     y = ts.data[ts.data$spp == spp_3_fig1[i] &
+                 ts.data$EI==0 &
+                 ts.data$noise=="white" &
+                 ts.data$variable=="Nsize" &
+                 ts.data$year %in% rows2plot,]$value,
+     type = "l", ylim=tsylim, xaxs = "i", yaxs="i", cex=0.8, 
+     ylab="",xlab="",log="y")
+title(ylab="log(SSB)",line=2)
+title(xlab="Year",line=2)
+title(main=CFI[i],line=1,adj=0)
+}
+rm(i)
+par(mfrow=c(1,1),mar=c(3,3,3,3))
+```
+
+Figure 1. Distribution of spawning over ages (a-c), transfer functions (d-f), and response of spawning stock biomass to white noise (g-i) for three representative species; . 
+
+
+
+```{r echo=FALSE, fig.width=6, fig.height=5, warning=FALSE}
+# Figure 2: spectra of environmental noise
+noise_specL <- as.list(rep(NA,length(noisetypes)))
+names(noise_specL) <- noisenames
+for(n in 1:length(noisetypes)){
+  ts <- noisetypes[[n]]
+  ts.mod <- (ts-mean(ts))/sd(ts) 
+  
+  tmp <- ceiling(sqrt(length(1:(length(ts.mod))))) 
+  if (tmp %% 2 == 0) {m <- tmp+1} else {m <- tmp} 
+  m = m * span.multiplier
+  sp = spec.pgram(ts.mod,spans=c(m,m),taper=0.1,plot=FALSE,demean=TRUE)
+  specN <- as.numeric((sp$spec)/sum((sp$spec)))
+  print(sum(specN))
+  spec <- sp$spec
+  freq <- sp$freq
+  noise <- rep(noisenames[n],length(freq))
+  df=data.frame(cbind(spec,specN,freq,noise),stringsAsFactors = FALSE)
+  df$spec <- as.numeric(as.character(df$spec))
+  df$specN <- as.numeric(as.character(df$specN))
+  df$freq <- as.numeric(as.character(df$freq))
+  noise_specL[[n]] <- df  
+}
+noise_specdf <- bind_rows(noise_specL,.id=NULL)
+rm(noise_specL,ts,ts.mod,sp,specN,spec,freq,noise,df,tmp)
+noise_specdf$noise <- as.factor(noise_specdf$noise)
+noise_specdf$noise <- factor(noise_specdf$noise,levels(noise_specdf$noise)[c(4,1,2,3)])
+#levels(noise_specdf$noise)
+#str(noise_specdf)
+#tiff(file='C:/Users/Mikaela/Documents/GitHub/pfmc/results/Noise_spectra_all.tiff', units="in", width=7, height=5, res=300) 
+ggplot(data=noise_specdf) +
+  geom_line(aes(x=freq,y=specN,linetype=noise)) +
+  theme_classic() + #scale_y_log10() +
+  xlab("Frequency") + ylab("Variance") +
+  scale_linetype_discrete("Environmental\nNoise") +
+  theme(legend.position = c(0.8,0.8))
+#dev.off()
+```
+
+Figure 2. Spectra of four environmental noise types: white, historical ENSO, ENSO frequencies sped up twice the speed of historical frequencies, and ENSO frequencies slowed down to one half the speed of historical frequencies. The area under each curve equals one. 
+
+
+
+```{r echo=FALSE, fig.width=10, fig.height=4, warning=FALSE}
+# Generate plots for Fig3
+noise_levels <- c("white","ENSO","ENSOfast","ENSOslow")
+ts.spec$noise <- factor(ts.spec$noise,levels=noise_levels)
+ts <- ts.spec[ts.spec$spp==spp_3_fig1[1] &
+    ts.spec$EI==0 &
+    ts.spec$variable=="Nsize" &
+    ts.spec$noise %in% c("white","ENSO"),]
+fig3a <- ggplot(data=ts,aes(x=freq,y=specN,color=noise)) +
+    geom_line() + scale_color_grey() +
+    scale_y_continuous(trans="log10") +
+    ggtitle(paste("a) ",spp_3_fig1[1],sep="")) +
+    theme_classic() + ylab("Variance") + xlab("Frequency") +
+    theme(legend.title = element_blank(),legend.position=c(0.7,0.9))
+ts <- ts.spec[ts.spec$spp==spp_3_fig1[3] &
+    ts.spec$EI==0 &
+    ts.spec$variable=="Nsize" &
+    ts.spec$noise %in% c("white","ENSO"),]
+fig3b <- ggplot(data=ts,aes(x=freq,y=specN,color=noise)) +
+    geom_line() + scale_color_grey() +
+    scale_y_continuous(trans="log10") +
+    ggtitle(paste("b) ",spp_3_fig1[3],sep="")) +
+    theme_classic() + ylab("Variance") + xlab("Frequency") +
+    theme(legend.title = element_blank(),legend.position=c(0.7,0.9))
+
+# SSB timeseries with OFL - white (fig3b, fig3e)
+spp = c("Sardine","Chilipepper")
+figletterbc <- c("c) ","e) ") 
+ts_pOFL_white <- as.list(rep(NA,length(spp)))
+names(ts_pOFL_white) <- spp
+  
+for(s in 1:length(ts_pOFL_white)) {
+    ts <- ts.data[ts.data$spp==spp[s] &
+                    ts.data$FLEP==0.35 &
+                    ts.data$variable=="Nsize" &
+                    ts.data$noise %in% c("white") &
+                    ts.data$year %in% rm_first_timesteps:(timesteps-2700),]
+    tswthres <-ts.data[ts.data$spp==spp[s] &
+                          ts.data$FLEP==0.3 &
+                          ts.data$variable=="Nsize" &
+                          ts.data$noise %in% c("white") &
+                          ts.data$year %in% rm_first_timesteps:(timesteps-2700),] 
+    ts$OFLmean <- tswthres$means
+    ts$shade <- rep(NA,length(ts[,1]))
+    for(m in 1:length(ts[,1])){
+      if(ts$OFLmean[m] >= ts$value[m]) {ts$shade[m] <- ts$value[m]} 
+      else {ts$shade[m] <- ts$OFLmean[1]}}
+    ts_pOFL_white[[s]] <- ggplot(data=ts,aes(x=year,y=value)) +
+      geom_ribbon(data = ts,
+              aes(ymin = shade, ymax = OFLmean),
+              fill = "grey") +
+      geom_line() + scale_y_log10() +
+      geom_hline(data=ts,aes(yintercept = OFLmean)) +
+      #ggtitle(paste(spp[s],"(",spawndistmetrics[spawndistmetrics$spp==spp[s],]$maxage,") - white noise","\nFraction below OFL: ",round(probdf[probdf$spp==spp[s] & probdf$variable=="Nsize" & probdf$noise=="white",]$probs,digits=2),sep="")) +
+      ggtitle(paste(figletterbc[s],spp[s]," (white),"," Pr(SSBt<OFL)=",round(probdf[probdf$spp==spp[s] & probdf$variable=="Nsize" & probdf$noise=="white",]$probs,digits=2),sep="")) +
+      ylab("log(SSB)") + xlab("Year") +
+      theme(legend.position="none",plot.title = element_text(margin = margin(t = 1, b = -20))) +
+      theme_classic() 
+}
+fig3c <- ts_pOFL_white[1]
+fig3e <- ts_pOFL_white[2]
+rm(ts,tswthres,ts_pOFL_white,figletterbc)
+
+
+# SSB timeseries with OFL - ENSO (fig3c, fig3f)
+spp = c("Sardine","Darkblotched")
+figletteref <- c("d) ","f) ") 
+ts_pOFL_ENSO <- as.list(rep(NA,length(spp)))
+names(ts_pOFL_ENSO) <- spp
+  
+for(s in 1:length(ts_pOFL_ENSO)) {
+    ts <- ts.data[ts.data$spp==spp[s] &
+                    ts.data$FLEP==0.35 &
+                    ts.data$variable=="Nsize" &
+                    ts.data$noise %in% c("ENSO") &
+                    ts.data$year %in% (rm_first_timesteps):(timesteps-2700),]
+    tswthres <-ts.data[ts.data$spp==spp[s] &
+                          ts.data$FLEP==0.3 &
+                          ts.data$variable=="Nsize" &
+                          ts.data$noise %in% c("ENSO") &
+                          ts.data$year %in% (rm_first_timesteps):(timesteps-2700) ,] 
+    
+    ts$OFLmean <- tswthres$means
+    ts$shade <- rep(NA,length(ts[,1]))
+    for(m in 1:length(ts[,1])){
+      if(ts$OFLmean[m] >= ts$value[m]) {ts$shade[m] <- ts$value[m]} 
+      else {ts$shade[m] <- ts$OFLmean[1]}}
+    ts_pOFL_ENSO[[s]] <- ggplot(data=ts,aes(x=year,y=value)) +
+      geom_ribbon(data = ts,
+              aes(ymin = shade, ymax = OFLmean),
+              fill = "grey") +
+      geom_line(color="grey") + scale_y_log10() +
+      geom_hline(data=ts,aes(yintercept = OFLmean),color="grey") +
+      #ggtitle(paste(spp[s],"(",spawndistmetrics[spawndistmetrics$spp==spp[s],]$maxage,") - white noise","\nFraction below OFL: ",round(probdf[probdf$spp==spp[s] & probdf$variable=="Nsize" & probdf$noise=="white",]$probs,digits=2),sep="")) +
+      ggtitle(paste(figletteref[s],spp[s]," (ENSO),"," Pr(SSBt<OFL)=",round(probdf[probdf$spp==spp[s] & probdf$variable=="Nsize" & probdf$noise=="ENSO",]$probs,digits=2),sep="")) +
+      ylab("log(SSB)") + xlab("Year") +
+      theme(legend.position="none",plot.title = element_text(margin = margin(t = 1, b = -20))) +
+      theme_classic() 
+}
+fig3d <- ts_pOFL_ENSO[1]
+fig3f <- ts_pOFL_ENSO[2]
+rm(ts,tswthres,ts_pOFL_ENSO)
+
+
+# Barplot- all spp, pOFL in white & ENSO
+pdfN <- probdf %>% filter(variable=="Nsize") %>% filter(noise %in% c("white","ENSO")) %>% select(spp,noise,probs)
+noise_levels <- c("white","ENSO")
+pdfN$noise <- factor(pdfN$noise,levels=noise_levels)
+spawndistmetrics$spp_max <- paste(spawndistmetrics$spp," (",spawndistmetrics$maxage,")",sep="")
+pdfN$spp_max <- spawndistmetrics[match(pdfN$spp,spawndistmetrics$spp),"spp_max"]
+pdfN$maxage <- spawndistmetrics[match(pdfN$spp,spawndistmetrics$spp),"maxage"]
+spp_levels_maxage <- spawndistmetrics[order(spawndistmetrics$maxage),]$spp_max 
+pdfN$spp_max <- factor(pdfN$spp_max, levels=spp_levels_maxage)
+fig3g <- ggplot(data=pdfN,
+       aes(x=spp_max,y=probs, fill=noise)) +
+  geom_bar(stat = "identity",position = position_dodge()) +
+  theme_bw() + theme(axis.text.x = element_text(angle = 50, hjust = 1)) +
+  scale_fill_grey() + ylab("Pr(SSBt<OFL)") + xlab("") +
+  theme(legend.title = element_blank(),legend.position=c(0.7,0.9)) +
+  ggtitle("g) All species")
+
+
+# Move to a new page
+grid.newpage()
+# Create layout : nrow = 4, ncol = 3
+pushViewport(viewport(layout = grid.layout(nrow = 4, ncol = 3)))
+# A helper function to define a region on the layout
+define_region <- function(row, col){
+  viewport(layout.pos.row = row, layout.pos.col = col)
+} 
+
+# Arrange the plots
+print(fig3a, vp = define_region(row = 1:2, col = 1))   # Span over two columns
+print(fig3b, vp = define_region(row = 3:4, col = 1))
+print(fig3c, vp = define_region(row = 1, col = 2))
+print(fig3d, vp = define_region(row = 2, col = 2))
+print(fig3e, vp = define_region(row = 3, col = 2))
+print(fig3f, vp = define_region(row = 4, col = 2))
+print(fig3g, vp = define_region(row = 1:4, col = 3))
+rm(fig3a,fig3b,fig3c,fig3d,fig3e,fig3f,fig3g)
+```
+
+Figure 3. Frequency response curves of spawning stock biomass time series to white noise and ENSO frequencies for `r spp_3_intext[1]`  (a), `r spp_3_intext[3]` (b). Time series of harvested `r spp_3_intext[1]` spawning stock biomass with white noise and historical ENSO frequencies (c,d), and for `r spp_3_intext[3]` (e,f). Horizontal line in spawning stock biomass time series plots (c-f) is the overfishing limit; in years when spawning stock biomass is less than the overfishing limit the stock is considered overfished. The area between the OFL and spawning stock biomass is shaded in grey to highlight which years the stock is below the OFL. 
+
+
+
+```{r echo=FALSE, fig.width=10, fig.height=4, warning=FALSE}
+# Generate plots for Figure 4
+noise_levels <- c("white","ENSO","ENSOfast","ENSOslow")
+ts.spec$noise <- factor(ts.spec$noise,levels=noise_levels)
+ts <- ts.spec[ts.spec$spp==spp_3_fig1[1] &
+    ts.spec$EI==0 &
+    ts.spec$variable=="Nsize" &
+    ts.spec$noise %in% c("ENSOfast","ENSOslow"),]
+fig3a <- ggplot(data=ts,aes(x=freq,y=specN,color=noise)) +
+    geom_line() + scale_color_grey() +
+    scale_y_continuous(trans="log10") +
+    ggtitle(paste("a) ",spp_3_fig1[1],sep="")) +
+    theme_classic() + ylab("Variance") + xlab("Frequency") +
+    theme(legend.title = element_blank(),legend.position=c(0.7,0.9))
+ts <- ts.spec[ts.spec$spp==spp_3_fig1[3] &
+    ts.spec$EI==0 &
+    ts.spec$variable=="Nsize" &
+    ts.spec$noise %in% c("ENSOfast","ENSOslow"),]
+fig3b <- ggplot(data=ts,aes(x=freq,y=specN,color=noise)) +
+    geom_line() + scale_color_grey() +
+    scale_y_continuous(trans="log10") +
+    ggtitle(paste("b) ",spp_3_fig1[3],sep="")) +
+    theme_classic() + ylab("Variance") + xlab("Frequency") +
+    theme(legend.title = element_blank(),legend.position=c(0.7,0.9))
+
+# SSB timeseries with OFL - ENSOfast (fig3b, fig3e)
+spp = c("Sardine","Darkblotched")
+figletterbc <- c("c) ","e) ") 
+ts_pOFL_ENSOfast <- as.list(rep(NA,length(spp)))
+names(ts_pOFL_ENSOfast) <- spp
+  
+for(s in 1:length(ts_pOFL_ENSOfast)) {
+    ts <- ts.data[ts.data$spp==spp[s] &
+                    ts.data$FLEP==0.35 &
+                    ts.data$variable=="Nsize" &
+                    ts.data$noise %in% c("ENSOfast") &
+                    ts.data$year %in% rm_first_timesteps:(timesteps-2700),]
+    tswthres <-ts.data[ts.data$spp==spp[s] &
+                          ts.data$FLEP==0.3 &
+                          ts.data$variable=="Nsize" &
+                          ts.data$noise %in% c("ENSOfast") &
+                          ts.data$year %in% rm_first_timesteps:(timesteps-2700),] 
+    ts$OFLmean <- tswthres$means
+    ts$shade <- rep(NA,length(ts[,1]))
+    for(m in 1:length(ts[,1])){
+      if(ts$OFLmean[m] >= ts$value[m]) {ts$shade[m] <- ts$value[m]} 
+      else {ts$shade[m] <- ts$OFLmean[1]}}
+    ts_pOFL_ENSOfast[[s]] <- ggplot(data=ts,aes(x=year,y=value)) +
+      geom_ribbon(data = ts,
+              aes(ymin = shade, ymax = OFLmean),
+              fill = "grey") +
+      geom_line() + scale_y_log10() +
+      geom_hline(data=ts,aes(yintercept = OFLmean)) +
+      #ggtitle(paste(spp[s],"(",spawndistmetrics[spawndistmetrics$spp==spp[s],]$maxage,") - white noise","\nFraction below OFL: ",round(probdf[probdf$spp==spp[s] & probdf$variable=="Nsize" & probdf$noise=="white",]$probs,digits=2),sep="")) +
+      ggtitle(paste(figletterbc[s],spp[s]," (ENSO-fast),"," Pr(SSBt<OFL)=",round(probdf[probdf$spp==spp[s] & probdf$variable=="Nsize" & probdf$noise=="ENSOfast",]$probs,digits=2),sep="")) +
+      ylab("log(SSB)") + xlab("Year") +
+      theme(legend.position="none",plot.title = element_text(margin = margin(t = 1, b = -20))) +
+      theme_classic() 
+}
+fig3c <- ts_pOFL_ENSOfast[1]
+fig3e <- ts_pOFL_ENSOfast[2]
+rm(ts,tswthres,ts_pOFL_ENSOfast,figletterbc)
+
+
+# SSB timeseries with OFL - ENSOslow (fig3d, fig3f)
+spp = c("Sardine","Darkblotched")
+figletteref <- c("d) ","f) ") 
+ts_pOFL_ENSOslow <- as.list(rep(NA,length(spp)))
+names(ts_pOFL_ENSOslow) <- spp
+  
+for(s in 1:length(ts_pOFL_ENSOslow)) {
+    ts <- ts.data[ts.data$spp==spp[s] &
+                    ts.data$FLEP==0.35 &
+                    ts.data$variable=="Nsize" &
+                    ts.data$noise %in% c("ENSOslow") &
+                    ts.data$year %in% (rm_first_timesteps):(timesteps-2700),]
+    tswthres <-ts.data[ts.data$spp==spp[s] &
+                          ts.data$FLEP==0.3 &
+                          ts.data$variable=="Nsize" &
+                          ts.data$noise %in% c("ENSOslow") &
+                          ts.data$year %in% (rm_first_timesteps):(timesteps-2700) ,] 
+    
+    ts$OFLmean <- tswthres$means
+    ts$shade <- rep(NA,length(ts[,1]))
+    for(m in 1:length(ts[,1])){
+      if(ts$OFLmean[m] >= ts$value[m]) {ts$shade[m] <- ts$value[m]} 
+      else {ts$shade[m] <- ts$OFLmean[1]}}
+    ts_pOFL_ENSOslow[[s]] <- ggplot(data=ts,aes(x=year,y=value)) +
+      geom_ribbon(data = ts,
+              aes(ymin = shade, ymax = OFLmean),
+              fill = "grey") +
+      geom_line(color="grey") + scale_y_log10() +
+      geom_hline(data=ts,aes(yintercept = OFLmean),color="grey") +
+      #ggtitle(paste(spp[s],"(",spawndistmetrics[spawndistmetrics$spp==spp[s],]$maxage,") - white noise","\nFraction below OFL: ",round(probdf[probdf$spp==spp[s] & probdf$variable=="Nsize" & probdf$noise=="white",]$probs,digits=2),sep="")) +
+      ggtitle(paste(figletteref[s],spp[s]," (ENSO-slow),"," Pr(SSBt<OFL)=",round(probdf[probdf$spp==spp[s] & probdf$variable=="Nsize" & probdf$noise=="ENSOslow",]$probs,digits=2),sep="")) +
+      ylab("log(SSB)") + xlab("Year") +
+      theme(legend.position="none",plot.title = element_text(margin = margin(t = 1, b = -20))) +
+      theme_classic() 
+}
+fig3d <- ts_pOFL_ENSOslow[1]
+fig3f <- ts_pOFL_ENSOslow[2]
+rm(ts,tswthres,ts_pOFL_ENSOslow)
+
+
+# Barplot- all spp, pOFL in white & ENSO
+pdfN <- probdf %>% filter(variable=="Nsize") %>% filter(noise %in% c("ENSOfast","ENSOslow")) %>% select(spp,noise,probs)
+noise_levels <- c("ENSOfast","ENSOslow")
+pdfN$noise <- factor(pdfN$noise,levels=noise_levels)
+spawndistmetrics$spp_max <- paste(spawndistmetrics$spp," (",spawndistmetrics$maxage,")",sep="")
+pdfN$spp_max <- spawndistmetrics[match(pdfN$spp,spawndistmetrics$spp),"spp_max"]
+pdfN$maxage <- spawndistmetrics[match(pdfN$spp,spawndistmetrics$spp),"maxage"]
+spp_levels_maxage <- spawndistmetrics[order(spawndistmetrics$maxage),]$spp_max 
+pdfN$spp_max <- factor(pdfN$spp_max, levels=spp_levels_maxage)
+fig3g <- ggplot(data=pdfN,
+       aes(x=spp_max,y=probs, fill=noise)) +
+  geom_bar(stat = "identity",position = position_dodge()) +
+  theme_bw() + theme(axis.text.x = element_text(angle = 50, hjust = 1)) +
+  scale_fill_grey() + ylab("Pr(SSBt<OFL)") + xlab("") +
+  theme(legend.title = element_blank(),legend.position=c(0.7,0.9)) +
+  ggtitle("g) All species")
+
+
+# Move to a new page
+grid.newpage()
+# Create layout : nrow = 4, ncol = 3
+pushViewport(viewport(layout = grid.layout(nrow = 4, ncol = 3)))
+# A helper function to define a region on the layout
+define_region <- function(row, col){
+  viewport(layout.pos.row = row, layout.pos.col = col)
+} 
+
+# Arrange the plots
+print(fig3a, vp = define_region(row = 1:2, col = 1))   # Span over two columns
+print(fig3b, vp = define_region(row = 3:4, col = 1))
+print(fig3c, vp = define_region(row = 1, col = 2))
+print(fig3d, vp = define_region(row = 2, col = 2))
+print(fig3e, vp = define_region(row = 3, col = 2))
+print(fig3f, vp = define_region(row = 4, col = 2))
+print(fig3g, vp = define_region(row = 1:4, col = 3))
+rm(fig3a,fig3b,fig3c,fig3d,fig3e,fig3f,fig3g)
+```
+
+Figure 4. Frequency response curves of spawning stock biomass time series to historical ENSO frequencies sped up and slowed down for `r spp_3_intext[1]`  (a), `r spp_3_intext[3]` (b). Time series of harvested `r spp_3_intext[1]` spawning stock biomass with fast ENSO frequencies and slow ENSO frequencies (c,d), and for `r spp_3_intext[3]` (e,f). Horizontal line in spawning stock biomass time series plots (c-f) is the overfishing limit; in years when spawning stock biomass is less than the overfishing limit the stock is considered overfished. The area between the OFL and spawning stock biomass is shaded in grey to highlight which years the stock is below the OFL. 

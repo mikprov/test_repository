@@ -379,7 +379,7 @@ simulate_spp <- function(noise,
     means <- rep(0,length=length(unique(aa1$EI)))
     for(f in 1:length(unique(aa1$EI))){
       means[f] <- mean(aa1[aa1$EI==unique(aa1$EI)[f] &
-                             aa1$year %in% rm_first_timesteps:(timesteps-2),]$value)
+                             aa1$year %in% rm_first_timesteps:(timesteps-2500),]$value)
       aa1[aa1$EI==unique(aa1$EI)[f],]$means <- rep(means[f],
                                                    length=length(aa1[aa1$EI==unique(aa1$EI)[f],1]))}
     df.list[[i]] <- aa1
@@ -541,3 +541,28 @@ generate3dLeslie <- function(spp,Fvals,EIlevels){
   }) #closes spp loop
   return(A3d_list)
 }#closes function
+
+
+# (15) Plot pOFL for each species in white noise, ENSO, ENSO fast
+# ***
+
+figX <- function(probdf){
+  df <- probdf[probdf$variable=="Nsize" & probdf$noise %in% c("white","ENSO","ENSOfast"),]
+  df$noisenum <- rep(NA,length(df[,1]))
+  df[df$noise %in% "white",]$noisenum <- 1
+  df[df$noise %in% "ENSO",]$noisenum <- 2
+  df[df$noise %in% "ENSOfast",]$noisenum <- 3
+  colnames(df)[7] <- "maxage"
+  df$noise <- factor(df$noise, levels=c("white","ENSO","ENSOfast"))
+  plot1 <- ggplot(data=df,aes(x=noise,y=probs)) +
+    geom_point(aes(shape=spp,color=maxage),size=2) + 
+    geom_line(aes(group=spp,color=maxage)) +
+    scale_shape_manual(name="Species",values=seq(from=0,to=length(unique(df$spp)))) +
+    ylab("Fraction of time below OFL") +
+    xlab("Environmental Noise") +
+    theme_minimal()
+  tiff(file='C:/Users/Mikaela/Documents/GitHub/pfmc/results/FigX_pOFL_vs_noisetype.tiff', units="in", width=5, height=4, res=300)
+  plot1
+  dev.off()
+}
+
